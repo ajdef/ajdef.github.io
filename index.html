@@ -10,7 +10,7 @@
       --tile:#fb923c; --dsp:#6aa9ff; --bram:#a78bfa; --io:#34d399;
       --wire:#94a3b8; --wire-hot:#f8fafc; --proj:#00ffd5; --rsch:#7458c2;
       --overlay-bg: rgba(4,7,12,.55);
-      --flash:#84cc16;
+      --flash:#84cc16; /* lime-500 (used when FLASH_MODE === "solid") */
     }
     html,body{margin:0;height:100%;background:#0b0f15;color:var(--ink);
       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial}
@@ -22,6 +22,7 @@
       font-size:12px;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}
     a:focus{outline:2px solid #60a5fa;outline-offset:2px}
 
+    /* Popup / overlay */
     .overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
       background: var(--overlay-bg); backdrop-filter: blur(2px); z-index: 5; }
     .overlay.open { display: flex; }
@@ -31,17 +32,19 @@
     .popup-content { height: 100%; display: flex; flex-direction: column; }
     .popup-header { display: flex; align-items: center; justify-content: space-between;
       padding: 12px 14px; background: #0b1224; border-bottom: 1px solid #243044; font-weight: 600; }
+    /* make body a flex container so embeds (like PDF) can fill space */
     .popup-body { padding: 14px; overflow: auto; line-height: 1.5; font-size: 14px; display:flex; flex-direction:column; gap:12px; height:100%; }
-    .popup-body p { white-space: pre-line; }
     .close-btn { background: #131c33; color: #cbd5e1; border: 1px solid #334155; border-radius: 10px; padding: 6px 10px; cursor: pointer; }
     .close-btn:hover { background: #1b2643; }
     .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #334155; background:#0b1224; margin-left:8px; color:#8fb4ff; }
 
+    /* helpers so media fills the popup nicely */
     .fill { flex:1 1 auto; min-height:0; }
     .pdfWrap, .iframeWrap, .imgWrap { flex:1 1 auto; min-height:0; border:1px solid #243044; border-radius:10px; overflow:hidden; background:#0b1224; }
     .pdfWrap object, .iframeWrap iframe { width:100%; height:100%; border:0; }
     .imgWrap img { width:100%; height:100%; object-fit:contain; display:block; background:#0b1224; }
 
+    /* Animated glow when a wire flashes */
     .wire { transition: stroke .22s ease, stroke-width .22s ease, opacity .18s ease; }
     .wire--flash { filter: drop-shadow(0 0 8px rgba(132,204,22,.45)); }
     .wireHalo { opacity: 0; filter: url(#softGlow); pointer-events:none; }
@@ -52,6 +55,7 @@
 <body>
   <div id="root"></div>
 
+  <!-- React + ReactDOM + Babel -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -60,36 +64,28 @@
     const {useMemo,useEffect,useRef,useState} = React;
 
     /* ===== Config ===== */
-    const COVER_MODE  = "ratio";     // default use ratio centering
-    const COVER_RATIO = 0.9;         // ~same as your previous default
-    const FLASH_MS    = 1200;
-    const FLASH_MODE  = "gradient";
+    const COVER_MODE  = "full";      // "full" | "ratio"
+    const COVER_RATIO = 0.9;         // used when COVER_MODE === "ratio"
+    const FLASH_MS    = 1200;        // highlight duration before popup
+    const FLASH_MODE  = "gradient";  // "solid" | "random" | "gradient"
 
-    /* Popup sizing defaults (new) */
-    const POPUP_DEFAULTS = {
-      coverMode: COVER_MODE,      // "full" | "ratio"
-      widthRatio:  COVER_RATIO,   // default width ~0.9 of SVG
-      heightRatio: COVER_RATIO,   // default height ~0.9 of SVG
-      center: "svg",              // "svg" | "wrap" | "viewport"
-      anchorY: "center"           // "center" | "keepTop" | "top" | "bottom"
-    };
-
-    /* ===== Global scaling ===== */
-    const SCALE      = 1.5;
+    /* ===== Global scaling (tiles + gaps + label font) ===== */
+    const SCALE      = 1.5;   // 50% larger
     const BASE_SIZE  = 56;
     const BASE_GAP   = 14;
     const BASE_FONT  = 11;
 
     const size      = Math.round(BASE_SIZE * SCALE);
     const gap       = Math.round(BASE_GAP  * SCALE);
-    const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE));
+    const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE)); // used by <Label/>
 
+    /* --- Text helpers (manual newline support) --- */
     function splitLines(label){ return String(label ?? "").split(/\r?\n/); }
     function Label({ t, x, y, tw, th, fontSize, opacity=1 }) {
       const lines = splitLines(t.label);
       const lineHeight = Math.round(fontSize * 1.2);
       const totalH = lineHeight * lines.length;
-      const startY = y + (th - totalH)/2 + lineHeight*0.8;
+      const startY = y + (th - totalH)/2 + lineHeight*0.8; // vertical centering
       const cx = x + tw/2;
       return (
         <text x={cx} y={startY} textAnchor="middle" fontSize={fontSize} fill="#111827"
@@ -99,7 +95,14 @@
       );
     }
 
-    /* ---- Popup content renderer ---- */
+    /* ===== Helper: allow px numbers or "%" strings for offsets ===== */
+    function pxOrPct(v, ref) {
+      if (typeof v === "string" && v.endsWith("%")) return (parseFloat(v)/100) * ref;
+      if (Number.isFinite(v)) return v;
+      return 0;
+    }
+
+    /* ---- Popup content renderer (per-tile) ---- */
     function PopupBody({ tile }) {
       const c = tile?.content;
 
@@ -159,9 +162,14 @@
       }
 
       if (c.type === "jsx" && typeof c.render === "function") {
-        return <div className="popup-body">{c.render()}</div>;
+        return (
+          <div className="popup-body">
+            {c.render()}
+          </div>
+        );
       }
 
+      // text (fallback)
       return (
         <div className="popup-body">
           {c.title && <h3 style={{margin:"0 0 6px"}}>{c.title}</h3>}
@@ -172,16 +180,20 @@
 
     function FPGAHome({ rows=7, cols=7, tiles, links }) {
       const [hoverId, setHoverId] = useState(null);
+
+      // popup state
       const [active, setActive] = useState(null);
       const [popupRect, setPopupRect] = useState(null);
       const wrapRef = useRef(null);
       const svgRef  = useRef(null);
 
+      // click highlight state
       const [clickedId, setClickedId]   = useState(null);
-      const [flashSpec, setFlashSpec]   = useState(null);
+      const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge(Map key->spec), grads:[...]}
       const clickTimerRef = useRef(null);
       const clickSeqRef   = useRef(0);
 
+      // close on ESC
       useEffect(()=>{
         const onKey = (e)=>{ if (e.key === "Escape") { clearClickFlash(); setActive(null); } };
         window.addEventListener("keydown", onKey);
@@ -189,6 +201,7 @@
       }, []);
       useEffect(()=>()=> clearClickFlash(), []);
 
+      // bitstream-style column sweep (one-time)
       const [activeCol, setActiveCol] = useState(-1);
       const sweepOnce = useRef(false);
       useEffect(() => {
@@ -203,6 +216,7 @@
         return ()=>clearInterval(t);
       },[cols]);
 
+      // geometry (uses scaled size/gap)
       const w = cols*size + (cols-1)*gap;
       const h = rows*size + (rows-1)*gap;
 
@@ -263,11 +277,13 @@
         const [sx,sy] = edgePointFor(src, exitSide);
         const [dx,dy] = edgePointFor(dst, enterSide);
 
+        // same row
         if (Math.round(srcCenterR) === Math.round(dstCenterR)) {
           const rowIdx = Math.max(1, Math.min(rows-1, Math.round(srcCenterR)));
           const yh = hChanY(rowIdx);
           return compressPath([[sx,sy],[sx,yh],[dx,yh],[dx,dy]]);
         }
+        // same column
         if (Math.round(srcCenterC) === Math.round(dstCenterC)) {
           const colIdx = Math.max(1, Math.min(cols-1, Math.round(srcCenterC)));
           const xv = vChanX(colIdx);
@@ -310,7 +326,7 @@
 
       const isRelated = (wire, tid) => wire.for===tid || wire.to===tid;
 
-      /* ===== UPDATED: openPopup with height control + anchorY ===== */
+      /* Popup helpers */
       const openPopup = (tile, evt) => {
         evt?.preventDefault?.();
         setActive(tile);
@@ -319,80 +335,64 @@
         const wrapBox = wrapRef.current.getBoundingClientRect();
         const svgBox  = svgRef.current.getBoundingClientRect();
 
-        const startLeft = svgBox.left - wrapBox.left + x;
-        const startTop  = svgBox.top  - wrapBox.top  + y;
+        // per-tile overrides (use tile.popup first, then tile.content, else globals)
+        const overrides = tile.popup || tile.content || {};
+        const mode   = overrides.coverMode  ?? COVER_MODE;   // "full" | "ratio"
+        const ratio  = overrides.coverRatio ?? COVER_RATIO;  // can be >1.0
+        const pxW    = overrides.width;                      // optional fixed px width
+        const pxH    = overrides.height;                     // optional fixed px height
 
-        const p = tile?.popup || {};
-        const mode = p.coverMode ?? POPUP_DEFAULTS.coverMode;
+        // NEW: offsets (px numbers or "%")
+        const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
+        const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
+        // NEW: start-only offsets (fallback to offX/offY if not provided)
+        const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
+        const sOffY = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
 
-        // Back-compat: coverRatio applies to both if specific ratios not set
-        const widthRatio  = (p.widthRatio  ?? (p.coverRatio ?? POPUP_DEFAULTS.widthRatio));
-        const heightRatio = (p.heightRatio ?? (p.coverRatio ?? POPUP_DEFAULTS.heightRatio));
+        // START (anchor) position — apply start offsets
+        const leftStart = (svgBox.left - wrapBox.left) + x + sOffX;
+        const topStart  = (svgBox.top  - wrapBox.top)  + y + sOffY;
 
-        const widthPx  = (p.widthPx  ?? p.width);
-        const heightPx = (p.heightPx ?? p.height);
-
-        const center = p.center || POPUP_DEFAULTS.center;
-        const basisBox =
-          center === "viewport"
-            ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
-            : center === "wrap"
-              ? wrapBox
-              : svgBox;
-
-        const anchorY = p.anchorY || POPUP_DEFAULTS.anchorY;  // "center" | "keepTop" | "top" | "bottom"
-
-        let target;
-        if (mode === "full") {
+        // TARGET (final) rect
+        let target = {};
+        if (Number.isFinite(pxW) && Number.isFinite(pxH)) {
+          const tW = Math.min(svgBox.width,  pxW);
+          const tH = Math.min(svgBox.height, pxH);
           target = {
-            left: (basisBox.left - wrapBox.left),
-            top:  (basisBox.top  - wrapBox.top),
-            width: basisBox.width,
-            height: basisBox.height
+            left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
+            top:   (svgBox.top  - wrapBox.top)  + (svgBox.height - tH)/2,
+            width: tW, height: tH
+          };
+        } else if (mode === "full") {
+          target = {
+            left:   svgBox.left - wrapBox.left,
+            top:    svgBox.top  - wrapBox.top,
+            width:  svgBox.width,
+            height: svgBox.height
           };
         } else {
-          const rW = Math.max(0.2, Number(widthRatio  ?? POPUP_DEFAULTS.widthRatio));
-          const rH = Math.max(0.2, Number(heightRatio ?? POPUP_DEFAULTS.heightRatio));
-
-          const tW = Number.isFinite(widthPx)  ? widthPx  : (basisBox.width  * rW);
-          const tH = Number.isFinite(heightPx) ? heightPx : (basisBox.height * rH);
-
-          const baseLeft = (basisBox.left - wrapBox.left);
-          const baseTop  = (basisBox.top  - wrapBox.top);
-
-          const centerLeft = baseLeft + (basisBox.width  - tW)/2;
-          const centerTop  = baseTop  + (basisBox.height - tH)/2;
-
-          // Baseline "default" height used to freeze the top edge when anchorY="keepTop"
-          const defaultH   = basisBox.height * POPUP_DEFAULTS.heightRatio;
-          const keepTopTop = baseTop + (basisBox.height - defaultH)/2;
-
-          let top;
-          if (anchorY === "keepTop") {
-            top = keepTopTop;                // grow downward
-          } else if (anchorY === "top") {
-            top = baseTop + (p.topOffset ?? 0);
-          } else if (anchorY === "bottom") {
-            top = baseTop + basisBox.height - tH - (p.bottomOffset ?? 0);
-          } else {
-            top = centerTop;                 // default center
-          }
-
-          target = { left: centerLeft, top, width: tW, height: tH };
+          const r = Math.max(0.2, ratio); // allow >1.0
+          const tW = svgBox.width  * r;
+          const tH = svgBox.height * r;
+          target = {
+            left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
+            top:   (svgBox.top  - wrapBox.top)  + (svgBox.height - tH)/2,
+            width: tW, height:tH
+          };
         }
 
-        setPopupRect({ left: startLeft, top: startTop, width: tw, height: th, target });
+        // Apply final nudge
+        target.left += offX;
+        target.top  += offY;
+
+        setPopupRect({ left: leftStart, top: topStart, width: tw, height: th, target });
         requestAnimationFrame(()=> {
-          setPopupRect(prev => prev ? ({
-            ...prev,
-            left: prev.target.left, top: prev.target.top,
-            width: prev.target.width, height: prev.target.height
-          }) : prev);
+          setPopupRect(prev => prev ? ({ ...prev, left: prev.target.left, top: prev.target.top, width: prev.target.width, height: prev.target.height }) : prev);
         });
       };
-
       const closePopup = () => setActive(null);
 
+      /* random / gradient stroke helpers */
       const rand = (a,b)=>a + Math.random()*(b-a);
       const randomVivid = ()=>`hsl(${Math.floor(rand(0,360))}deg, 80%, 62%)`;
 
@@ -427,6 +427,7 @@
         return { mode: FLASH_MODE, seq, perEdge, grads };
       }
 
+      /* click → flash (1.2s) → popup */
       function clearClickFlash(){
         if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
         setClickedId(null);
@@ -451,6 +452,7 @@
           <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:"auto",boxShadow:"0 12px 36px rgba(0,0,0,.35)",borderRadius:14}}
                role="grid" aria-label="FPGA-style navigation">
 
+            {/* defs: soft glow + dynamic gradients */}
             <defs>
               <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
@@ -466,6 +468,7 @@
               ))}
             </defs>
 
+            {/* WIRES */}
             <g>
               {wirePaths.map((w,i)=>{
                 const flashing = clickedId && (w.for === clickedId || w.to === clickedId);
@@ -510,6 +513,7 @@
               })}
             </g>
 
+            {/* BACKGROUND GRID CELLS */}
             {Array.from({length: rows}).map((_,r)=>
               Array.from({length: cols}).map((__,c)=>{
                 const {x,y,w:ww,h:hh} = cellRect(r,c);
@@ -520,6 +524,7 @@
               })
             )}
 
+            {/* TILES */}
             {tiles.map((t)=>{
               const {x,y,w:tw,h:th} = tileRectFor(t);
               const isHot = isHovering(t.id);
@@ -544,6 +549,7 @@
             })}
           </svg>
 
+          {/* POPUP */}
           <div className={`overlay ${active ? "open" : ""}`} aria-hidden={!active} onClick={(e)=>{ if(e.target === e.currentTarget) closePopup(); }}>
             {active && popupRect && (
               <div className="popup" role="dialog" aria-modal="true"
@@ -556,6 +562,7 @@
                     </div>
                     <button className="close-btn" onClick={closePopup} autoFocus aria-label="Close">✕ Close</button>
                   </div>
+                  {/* Per-tile custom content lives here */}
                   <PopupBody tile={active}/>
                 </div>
               </div>
@@ -573,8 +580,9 @@
     /* ---------- Sample data with per-tile content ---------- */
     const tiles = [
       { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
-        content: { type:"text", title:"About Me", text:"Hi! I’m Alex. I work on FPGA/architecture projects, and I like turning RTL and CAD ideas into interactive visuals like this page.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nTest " }
-      },
+        content: { type:"text", title:"About Me", text:"Hi! I’m Alex. I work on FPGA/architecture projects, and I like turning RTL and CAD ideas into interactive visuals like this page." },
+        popup: {startOffsetY:0, offsetY:-48}
+    },
       { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
         content: { type:"list", title:"How this works", items:[
           "Tiles = CLBs/IO/DSP/BRAM styles",
@@ -585,7 +593,8 @@
       },
       { id:"resume", r:0, c:0, label:"My\nResume", kind:"DSP", spanR:2, spanC:1,
         content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
-        popup:  { coverMode:"ratio", widthRatio:1.05, heightRatio:1.325, anchorY:"keepTop" }  /* grow downward */
+        // EXAMPLE: nudge start and final positions upward a bit
+        popup:  { coverMode:"ratio", coverRatio:1.2, startOffsetY:0, offsetY:0 }
       },
       { id:"research", r:3, c:0, label:"Research\nExperience", kind:"DSP", spanR:2, spanC:1,
         content: { type:"html", html:"<p><b>Areas:</b> eFPGA fabrics, on-chip networks, cache coherence, reliability.<br/>Ask me about gem5, SECDED, and CAD flows.</p>" }
