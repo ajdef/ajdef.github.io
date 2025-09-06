@@ -32,7 +32,6 @@
     .popup-content { height: 100%; display: flex; flex-direction: column; }
     .popup-header { display: flex; align-items: center; justify-content: space-between;
       padding: 12px 14px; background: #0b1224; border-bottom: 1px solid #243044; font-weight: 600; }
-    /* make body a flex container so embeds (like PDF) can fill space */
     .popup-body { padding: 14px; overflow: auto; line-height: 1.5; font-size: 14px; display:flex; flex-direction:column; gap:12px; height:100%; }
     .close-btn { background: #131c33; color: #cbd5e1; border: 1px solid #334155; border-radius: 10px; padding: 6px 10px; cursor: pointer; }
     .close-btn:hover { background: #1b2643; }
@@ -65,19 +64,20 @@
 
     /* ===== Config ===== */
     const COVER_MODE  = "full";      // "full" | "ratio"
-    const COVER_RATIO = 0.9;         // used when COVER_MODE === "ratio"
-    const FLASH_MS    = 1200;        // highlight duration before popup
+    const COVER_RATIO = 0.9;         // width ratio when COVER_MODE === "ratio"
+    const HEIGHT_RATIO = COVER_RATIO; // NEW: default height ratio (falls back to COVER_RATIO)
+    const FLASH_MS    = 1200;
     const FLASH_MODE  = "gradient";  // "solid" | "random" | "gradient"
 
     /* ===== Global scaling (tiles + gaps + label font) ===== */
-    const SCALE      = 1.5;   // 50% larger
+    const SCALE      = 1.5;
     const BASE_SIZE  = 56;
     const BASE_GAP   = 14;
     const BASE_FONT  = 11;
 
     const size      = Math.round(BASE_SIZE * SCALE);
     const gap       = Math.round(BASE_GAP  * SCALE);
-    const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE)); // used by <Label/>
+    const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE));
 
     /* --- Text helpers (manual newline support) --- */
     function splitLines(label){ return String(label ?? "").split(/\r?\n/); }
@@ -85,7 +85,7 @@
       const lines = splitLines(t.label);
       const lineHeight = Math.round(fontSize * 1.2);
       const totalH = lineHeight * lines.length;
-      const startY = y + (th - totalH)/2 + lineHeight*0.8; // vertical centering
+      const startY = y + (th - totalH)/2 + lineHeight*0.8;
       const cx = x + tw/2;
       return (
         <text x={cx} y={startY} textAnchor="middle" fontSize={fontSize} fill="#111827"
@@ -169,7 +169,6 @@
         );
       }
 
-      // text (fallback)
       return (
         <div className="popup-body">
           {c.title && <h3 style={{margin:"0 0 6px"}}>{c.title}</h3>}
@@ -189,7 +188,7 @@
 
       // click highlight state
       const [clickedId, setClickedId]   = useState(null);
-      const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge(Map key->spec), grads:[...]}
+      const [flashSpec, setFlashSpec]   = useState(null);
       const clickTimerRef = useRef(null);
       const clickSeqRef   = useRef(0);
 
@@ -216,7 +215,7 @@
         return ()=>clearInterval(t);
       },[cols]);
 
-      // geometry (uses scaled size/gap)
+      // geometry
       const w = cols*size + (cols-1)*gap;
       const h = rows*size + (rows-1)*gap;
 
@@ -338,14 +337,15 @@
         // per-tile overrides (use tile.popup first, then tile.content, else globals)
         const overrides = tile.popup || tile.content || {};
         const mode   = overrides.coverMode  ?? COVER_MODE;   // "full" | "ratio"
-        const ratio  = overrides.coverRatio ?? COVER_RATIO;  // can be >1.0
-        const pxW    = overrides.width;                      // optional fixed px width
-        const pxH    = overrides.height;                     // optional fixed px height
+        const ratioW = overrides.coverRatio ?? COVER_RATIO;  // width ratio
+        const ratioH = overrides.heightRatio ?? HEIGHT_RATIO; // NEW: height ratio
+        const pxW    = overrides.width;                      // fixed px width (optional)
+        const pxH    = overrides.height;                     // fixed px height (optional)
 
-        // NEW: offsets (px numbers or "%")
+        // Offsets (px or "%")
         const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
         const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
-        // NEW: start-only offsets (fallback to offX/offY if not provided)
+        // Start-only offsets (fallback to offX/offY)
         const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
         const sOffY = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
 
@@ -356,8 +356,8 @@
         // TARGET (final) rect
         let target = {};
         if (Number.isFinite(pxW) && Number.isFinite(pxH)) {
-          const tW = Math.min(svgBox.width,  pxW);
-          const tH = Math.min(svgBox.height, pxH);
+          const tW = pxW;
+          const tH = pxH;
           target = {
             left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
             top:   (svgBox.top  - wrapBox.top)  + (svgBox.height - tH)/2,
@@ -371,13 +371,23 @@
             height: svgBox.height
           };
         } else {
-          const r = Math.max(0.2, ratio); // allow >1.0
-          const tW = svgBox.width  * r;
-          const tH = svgBox.height * r;
+          // Allow >1.0; clamp only at a small minimum
+          const rW = Math.max(0.2, ratioW);
+          const rH = Math.max(0.2, ratioH);
+
+          const tW = svgBox.width  * rW;
+          const tH = svgBox.height * rH;
+
+          // If anchorTop is true, keep the "top" as if height == ratioW (old behavior),
+          // then grow/shrink downward only by using that same top reference.
+          const anchorTop = !!overrides.anchorTop;
+          const topRef = (svgBox.top - wrapBox.top) + (svgBox.height - (svgBox.height * rW))/2;
+
           target = {
             left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
-            top:   (svgBox.top  - wrapBox.top)  + (svgBox.height - tH)/2,
-            width: tW, height:tH
+            top:   anchorTop ? topRef : (svgBox.top - wrapBox.top) + (svgBox.height - tH)/2,
+            width: tW,
+            height:tH
           };
         }
 
@@ -562,7 +572,6 @@
                     </div>
                     <button className="close-btn" onClick={closePopup} autoFocus aria-label="Close">✕ Close</button>
                   </div>
-                  {/* Per-tile custom content lives here */}
                   <PopupBody tile={active}/>
                 </div>
               </div>
@@ -581,8 +590,8 @@
     const tiles = [
       { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
         content: { type:"text", title:"About Me", text:"Hi! I’m Alex. I work on FPGA/architecture projects, and I like turning RTL and CAD ideas into interactive visuals like this page." },
-        popup: {startOffsetY:0, offsetY:-48}
-    },
+        popup: { startOffsetY:0, offsetY:-48, /* optional heightRatio here too */ }
+      },
       { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
         content: { type:"list", title:"How this works", items:[
           "Tiles = CLBs/IO/DSP/BRAM styles",
@@ -593,8 +602,8 @@
       },
       { id:"resume", r:0, c:0, label:"My\nResume", kind:"DSP", spanR:2, spanC:1,
         content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
-        // EXAMPLE: nudge start and final positions upward a bit
-        popup:  { coverMode:"ratio", coverRatio:1.2, startOffsetY:0, offsetY:0 }
+        // Example: make taller + grow downward so the header stays visible
+        popup:  { coverMode:"ratio", coverRatio:1.2, heightRatio:1.35, anchorTop:true, startOffsetY:0, offsetY:0 }
       },
       { id:"research", r:3, c:0, label:"Research\nExperience", kind:"DSP", spanR:2, spanC:1,
         content: { type:"html", html:"<p><b>Areas:</b> eFPGA fabrics, on-chip networks, cache coherence, reliability.<br/>Ask me about gem5, SECDED, and CAD flows.</p>" }
