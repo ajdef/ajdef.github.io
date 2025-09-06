@@ -1,2 +1,639 @@
-# ajdef.github.io
-Portfolio Website
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FPGA Grid – merged tiles + expanding popup</title>
+  <style>
+    :root{
+      --bg:#0b0f15; --ink:#e5e7eb; --stroke:#9ca3af; --hot:#111827;
+      --tile:#fb923c; --dsp:#6aa9ff; --bram:#a78bfa; --io:#34d399;
+      --wire:#94a3b8; --wire-hot:#f8fafc; --proj:#00ffd5; --rsch:#7458c2;
+      --overlay-bg: rgba(4,7,12,.55);
+      --flash:#84cc16;
+    }
+    html,body{margin:0;height:100%;background:#0b0f15;color:var(--ink);
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial}
+    .wrap{max-width:860px;margin:0 auto;padding:24px 16px 40px; position: relative;}
+    h1{margin:0 0 8px;font-size:20px;color:#cbd5e1}
+    p.sub{margin:0 0 16px;color:#9aa6b2;font-size:13px}
+    .tooltip{position:absolute;left:50%;top:8px;transform:translateX(-50%);
+      background:rgba(255,255,255,.9);color:#111827;border-radius:10px;padding:6px 10px;
+      font-size:12px;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    a:focus{outline:2px solid #60a5fa;outline-offset:2px}
+
+    .overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      background: var(--overlay-bg); backdrop-filter: blur(2px); z-index: 5; }
+    .overlay.open { display: flex; }
+    .popup { position: absolute; border-radius: 14px; background: #0f172a; color: #e2e8f0;
+      box-shadow: 0 18px 60px rgba(0,0,0,.45), 0 2px 16px rgba(0,0,0,.35) inset; border: 1px solid #334155;
+      overflow: hidden; transition: left .28s ease, top .28s ease, width .28s ease, height .28s ease, border-radius .28s ease, opacity .18s ease; }
+    .popup-content { height: 100%; display: flex; flex-direction: column; }
+    .popup-header { display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: #0b1224; border-bottom: 1px solid #243044; font-weight: 600; }
+    .popup-body { padding: 14px; overflow: auto; line-height: 1.5; font-size: 14px; display:flex; flex-direction:column; gap:12px; height:100%; }
+    .popup-body p { white-space: pre-line; }
+    .close-btn { background: #131c33; color: #cbd5e1; border: 1px solid #334155; border-radius: 10px; padding: 6px 10px; cursor: pointer; }
+    .close-btn:hover { background: #1b2643; }
+    .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #334155; background:#0b1224; margin-left:8px; color:#8fb4ff; }
+
+    .fill { flex:1 1 auto; min-height:0; }
+    .pdfWrap, .iframeWrap, .imgWrap { flex:1 1 auto; min-height:0; border:1px solid #243044; border-radius:10px; overflow:hidden; background:#0b1224; }
+    .pdfWrap object, .iframeWrap iframe { width:100%; height:100%; border:0; }
+    .imgWrap img { width:100%; height:100%; object-fit:contain; display:block; background:#0b1224; }
+
+    .wire { transition: stroke .22s ease, stroke-width .22s ease, opacity .18s ease; }
+    .wire--flash { filter: drop-shadow(0 0 8px rgba(132,204,22,.45)); }
+    .wireHalo { opacity: 0; filter: url(#softGlow); pointer-events:none; }
+    .wireHalo.animate { animation: haloPulse 900ms ease-out forwards; }
+    @keyframes haloPulse { 0% {opacity:0;} 35% {opacity:.95;} 100% {opacity:0;} }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const {useMemo,useEffect,useRef,useState} = React;
+
+    /* ===== Config ===== */
+    const COVER_MODE  = "ratio";     // default use ratio centering
+    const COVER_RATIO = 0.9;         // ~same as your previous default
+    const FLASH_MS    = 1200;
+    const FLASH_MODE  = "gradient";
+
+    /* Popup sizing defaults (new) */
+    const POPUP_DEFAULTS = {
+      coverMode: COVER_MODE,      // "full" | "ratio"
+      widthRatio:  COVER_RATIO,   // default width ~0.9 of SVG
+      heightRatio: COVER_RATIO,   // default height ~0.9 of SVG
+      center: "svg",              // "svg" | "wrap" | "viewport"
+      anchorY: "center"           // "center" | "keepTop" | "top" | "bottom"
+    };
+
+    /* ===== Global scaling ===== */
+    const SCALE      = 1.5;
+    const BASE_SIZE  = 56;
+    const BASE_GAP   = 14;
+    const BASE_FONT  = 11;
+
+    const size      = Math.round(BASE_SIZE * SCALE);
+    const gap       = Math.round(BASE_GAP  * SCALE);
+    const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE));
+
+    function splitLines(label){ return String(label ?? "").split(/\r?\n/); }
+    function Label({ t, x, y, tw, th, fontSize, opacity=1 }) {
+      const lines = splitLines(t.label);
+      const lineHeight = Math.round(fontSize * 1.2);
+      const totalH = lineHeight * lines.length;
+      const startY = y + (th - totalH)/2 + lineHeight*0.8;
+      const cx = x + tw/2;
+      return (
+        <text x={cx} y={startY} textAnchor="middle" fontSize={fontSize} fill="#111827"
+              style={{pointerEvents:"none",userSelect:"none"}} opacity={opacity}>
+          {lines.map((ln,i)=>(<tspan key={i} x={cx} dy={i===0 ? 0 : lineHeight}>{ln}</tspan>))}
+        </text>
+      );
+    }
+
+    /* ---- Popup content renderer ---- */
+    function PopupBody({ tile }) {
+      const c = tile?.content;
+
+      if (!c) {
+        return (
+          <div className="popup-body">
+            <p><strong>ID:</strong> {tile.id}</p>
+            <p><strong>Grid position:</strong> r{tile.r}, c{tile.c} {tile.spanR||tile.spanC ? `(span ${tile.spanR||1}×${tile.spanC||1})` : ""}</p>
+            <p>No custom content provided yet.</p>
+          </div>
+        );
+      }
+
+      if (c.type === "pdf") {
+        return (
+          <div className="popup-body">
+            {c.title && <h3 style={{margin:"0 0 6px"}}>{c.title}</h3>}
+            <div className="pdfWrap fill">
+              <object data={c.src} type="application/pdf">
+                <div style={{padding:12}}>
+                  Your browser can’t display embedded PDFs here.
+                  <a href={c.src} target="_blank" rel="noreferrer" style={{marginLeft:8}}>Open the PDF</a>
+                </div>
+              </object>
+            </div>
+          </div>
+        );
+      }
+
+      if (c.type === "img") {
+        return (
+          <div className="popup-body">
+            {c.caption && <h3 style={{margin:"0 0 6px"}}>{c.caption}</h3>}
+            <div className="imgWrap fill"><img src={c.src} alt={c.alt||""}/></div>
+          </div>
+        );
+      }
+
+      if (c.type === "list") {
+        return (
+          <div className="popup-body">
+            {c.title && <h3 style={{margin:"0 0 6px"}}>{c.title}</h3>}
+            <ul style={{margin:"0 0 8px 18px"}}>
+              {c.items?.map((it,i)=>(<li key={i}>{it}</li>))}
+            </ul>
+            {c.note && <p style={{opacity:.8}}>{c.note}</p>}
+          </div>
+        );
+      }
+
+      if (c.type === "html") {
+        return (
+          <div className="popup-body">
+            <div dangerouslySetInnerHTML={{__html:c.html}} className="fill" />
+          </div>
+        );
+      }
+
+      if (c.type === "jsx" && typeof c.render === "function") {
+        return <div className="popup-body">{c.render()}</div>;
+      }
+
+      return (
+        <div className="popup-body">
+          {c.title && <h3 style={{margin:"0 0 6px"}}>{c.title}</h3>}
+          <p className="fill">{c.text || "No content."}</p>
+        </div>
+      );
+    }
+
+    function FPGAHome({ rows=7, cols=7, tiles, links }) {
+      const [hoverId, setHoverId] = useState(null);
+      const [active, setActive] = useState(null);
+      const [popupRect, setPopupRect] = useState(null);
+      const wrapRef = useRef(null);
+      const svgRef  = useRef(null);
+
+      const [clickedId, setClickedId]   = useState(null);
+      const [flashSpec, setFlashSpec]   = useState(null);
+      const clickTimerRef = useRef(null);
+      const clickSeqRef   = useRef(0);
+
+      useEffect(()=>{
+        const onKey = (e)=>{ if (e.key === "Escape") { clearClickFlash(); setActive(null); } };
+        window.addEventListener("keydown", onKey);
+        return ()=>window.removeEventListener("keydown", onKey);
+      }, []);
+      useEffect(()=>()=> clearClickFlash(), []);
+
+      const [activeCol, setActiveCol] = useState(-1);
+      const sweepOnce = useRef(false);
+      useEffect(() => {
+        if (sweepOnce.current) return;
+        sweepOnce.current = true;
+        let col=-1;
+        const step=45;
+        const t=setInterval(()=>{ col++; setActiveCol(col); if(col>=cols+2) clearInterval(t); }, step);
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+          setActiveCol(cols+2); clearInterval(t);
+        }
+        return ()=>clearInterval(t);
+      },[cols]);
+
+      const w = cols*size + (cols-1)*gap;
+      const h = rows*size + (rows-1)*gap;
+
+      const cellRect = (r,c) => ({ x:c*(size+gap), y:r*(size+gap), w:size, h:size });
+      const tileRectFor = (t) => {
+        const spanR = t?.spanR ?? 1, spanC = t?.spanC ?? 1;
+        const x = t.c*(size+gap), y = t.r*(size+gap);
+        const w = spanC*size + (spanC-1)*gap, h = spanR*size + (spanR-1)*gap;
+        return { x, y, w, h };
+      };
+      const edgePointFor = (t, side) => {
+        const {x,y,w,h} = tileRectFor(t);
+        if (side==="L") return [x, y+h/2];
+        if (side==="R") return [x+w, y+h/2];
+        if (side==="T") return [x+w/2, y];
+        return [x+w/2, y+h];
+      };
+      const vChanX = (k) => (k>=1 && k<=cols-1) ? (k*(size+gap) - gap/2) : null;
+      const hChanY = (k) => (k>=1 && k<=rows-1) ? (k*(size+gap) - gap/2) : null;
+
+      const tileById = useMemo(()=>{ const m=new Map(); tiles.forEach(t=>m.set(t.id,t)); return m; },[tiles]);
+
+      const KIND_COLOR = {
+        CLB:"var(--tile)", DSP:"var(--dsp)", BRAM:"var(--bram)", IO:"var(--io)",
+        PCIE:"var(--pcie)", PLL:"var(--pll)", rsch:"var(--rsch)", PROJ:"var(--proj)"
+      };
+      const fillFor = (t) => t ? (KIND_COLOR[t.kind] || "var(--tile)") : "#e5e7eb";
+
+      function compressPath(pts){
+        const dedup = [pts[0]];
+        for (let i=1;i<pts.length;i++){
+          const [ax,ay]=dedup[dedup.length-1], [bx,by]=pts[i];
+          if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
+        }
+        const out = [dedup[0]];
+        for (let i=1;i<dedup.length-1;i++){
+          const [x0,y0]=out[out.length-1], [x1,y1]=dedup[i], [x2,y2]=dedup[i+1];
+          const collinear = (Math.abs(x0-x1)<0.5 && Math.abs(x1-x2)<0.5) ||
+                            (Math.abs(y0-y1)<0.5 && Math.abs(y1-y2)<0.5);
+          if (!collinear) out.push([x1,y1]);
+        }
+        out.push(dedup[dedup.length-1]);
+        return out;
+      }
+
+      function routeBetween(src, dst){
+        const srcCenterC = src.c + (src.spanC ?? 1)/2;
+        const srcCenterR = src.r + (src.spanR ?? 1)/2;
+        const dstCenterC = dst.c + (dst.spanC ?? 1)/2;
+        const dstCenterR = dst.r + (dst.spanR ?? 1)/2;
+
+        let exitSide, enterSide;
+        if (dstCenterC > srcCenterC) { exitSide="R"; enterSide="L"; }
+        else if (dstCenterC < srcCenterC) { exitSide="L"; enterSide="R"; }
+        else if (dstCenterR > srcCenterR) { exitSide="B"; enterSide="T"; }
+        else { exitSide="T"; enterSide="B"; }
+
+        const [sx,sy] = edgePointFor(src, exitSide);
+        const [dx,dy] = edgePointFor(dst, enterSide);
+
+        if (Math.round(srcCenterR) === Math.round(dstCenterR)) {
+          const rowIdx = Math.max(1, Math.min(rows-1, Math.round(srcCenterR)));
+          const yh = hChanY(rowIdx);
+          return compressPath([[sx,sy],[sx,yh],[dx,yh],[dx,dy]]);
+        }
+        if (Math.round(srcCenterC) === Math.round(dstCenterC)) {
+          const colIdx = Math.max(1, Math.min(cols-1, Math.round(srcCenterC)));
+          const xv = vChanX(colIdx);
+          return compressPath([[sx,sy],[xv,sy],[xv,dy],[dx,dy]]);
+        }
+
+        const srcRightCol = src.c + (src.spanC ?? 1);
+        const srcBottomRow = src.r + (src.spanR ?? 1);
+        const dstRightCol = dst.c + (dst.spanC ?? 1);
+        const dstBottomRow = dst.r + (dst.spanR ?? 1);
+
+        const vStart = exitSide==="R" ? vChanX(srcRightCol) : exitSide==="L" ? vChanX(src.c) : null;
+        const hStart = exitSide==="B" ? hChanY(srcBottomRow) : exitSide==="T" ? hChanY(src.r) : null;
+
+        const vEnd   = enterSide==="L" ? vChanX(dst.c) : enterSide==="R" ? vChanX(dstRightCol) : null;
+        const hEnd   = enterSide==="T" ? hChanY(dst.r) : enterSide==="B" ? hChanY(dstBottomRow) : null;
+
+        const xvStart = vStart ?? vChanX(Math.max(1, Math.min(cols-1, Math.round(srcCenterC))));
+        const xvEnd   = vEnd   ?? vChanX(Math.max(1, Math.min(cols-1, Math.round(dstCenterC))));
+        const yhStart = hStart ?? hChanY(Math.max(1, Math.min(rows-1, Math.round(srcCenterR))));
+        const yhEnd   = hEnd   ?? hChanY(Math.max(1, Math.min(rows-1, Math.round(dstCenterR))));
+
+        const goVerticalFirst = Math.abs(dstCenterC - srcCenterC) >= Math.abs(dstCenterR - srcCenterR);
+        return goVerticalFirst
+          ? compressPath([[sx,sy],[xvStart,sy],[xvStart,yhEnd],[xvEnd,yhEnd],[xvEnd,dy],[dx,dy]])
+          : compressPath([[sx,sy],[sx,yhStart],[xvEnd,yhStart],[xvEnd,dy],[dx,dy]]);
+      }
+
+      const wirePaths = useMemo(()=>{
+        const out=[];
+        for (const L of links){
+          const s = tileById.get(L.for), d = tileById.get(L.to);
+          if (!s || !d) continue;
+          const ready = (d.c <= activeCol);
+          const pts = routeBetween(s,d);
+          out.push({ for:L.for, to:L.to, pts, ready });
+        }
+        return out;
+      }, [links, tileById, activeCol]);
+
+      const isRelated = (wire, tid) => wire.for===tid || wire.to===tid;
+
+      /* ===== UPDATED: openPopup with height control + anchorY ===== */
+      const openPopup = (tile, evt) => {
+        evt?.preventDefault?.();
+        setActive(tile);
+
+        const {x,y,w:tw,h:th} = tileRectFor(tile);
+        const wrapBox = wrapRef.current.getBoundingClientRect();
+        const svgBox  = svgRef.current.getBoundingClientRect();
+
+        const startLeft = svgBox.left - wrapBox.left + x;
+        const startTop  = svgBox.top  - wrapBox.top  + y;
+
+        const p = tile?.popup || {};
+        const mode = p.coverMode ?? POPUP_DEFAULTS.coverMode;
+
+        // Back-compat: coverRatio applies to both if specific ratios not set
+        const widthRatio  = (p.widthRatio  ?? (p.coverRatio ?? POPUP_DEFAULTS.widthRatio));
+        const heightRatio = (p.heightRatio ?? (p.coverRatio ?? POPUP_DEFAULTS.heightRatio));
+
+        const widthPx  = (p.widthPx  ?? p.width);
+        const heightPx = (p.heightPx ?? p.height);
+
+        const center = p.center || POPUP_DEFAULTS.center;
+        const basisBox =
+          center === "viewport"
+            ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+            : center === "wrap"
+              ? wrapBox
+              : svgBox;
+
+        const anchorY = p.anchorY || POPUP_DEFAULTS.anchorY;  // "center" | "keepTop" | "top" | "bottom"
+
+        let target;
+        if (mode === "full") {
+          target = {
+            left: (basisBox.left - wrapBox.left),
+            top:  (basisBox.top  - wrapBox.top),
+            width: basisBox.width,
+            height: basisBox.height
+          };
+        } else {
+          const rW = Math.max(0.2, Number(widthRatio  ?? POPUP_DEFAULTS.widthRatio));
+          const rH = Math.max(0.2, Number(heightRatio ?? POPUP_DEFAULTS.heightRatio));
+
+          const tW = Number.isFinite(widthPx)  ? widthPx  : (basisBox.width  * rW);
+          const tH = Number.isFinite(heightPx) ? heightPx : (basisBox.height * rH);
+
+          const baseLeft = (basisBox.left - wrapBox.left);
+          const baseTop  = (basisBox.top  - wrapBox.top);
+
+          const centerLeft = baseLeft + (basisBox.width  - tW)/2;
+          const centerTop  = baseTop  + (basisBox.height - tH)/2;
+
+          // Baseline "default" height used to freeze the top edge when anchorY="keepTop"
+          const defaultH   = basisBox.height * POPUP_DEFAULTS.heightRatio;
+          const keepTopTop = baseTop + (basisBox.height - defaultH)/2;
+
+          let top;
+          if (anchorY === "keepTop") {
+            top = keepTopTop;                // grow downward
+          } else if (anchorY === "top") {
+            top = baseTop + (p.topOffset ?? 0);
+          } else if (anchorY === "bottom") {
+            top = baseTop + basisBox.height - tH - (p.bottomOffset ?? 0);
+          } else {
+            top = centerTop;                 // default center
+          }
+
+          target = { left: centerLeft, top, width: tW, height: tH };
+        }
+
+        setPopupRect({ left: startLeft, top: startTop, width: tw, height: th, target });
+        requestAnimationFrame(()=> {
+          setPopupRect(prev => prev ? ({
+            ...prev,
+            left: prev.target.left, top: prev.target.top,
+            width: prev.target.width, height: prev.target.height
+          }) : prev);
+        });
+      };
+
+      const closePopup = () => setActive(null);
+
+      const rand = (a,b)=>a + Math.random()*(b-a);
+      const randomVivid = ()=>`hsl(${Math.floor(rand(0,360))}deg, 80%, 62%)`;
+
+      function buildFlashSpecFor(tileId){
+        const perEdge = new Map();
+        const grads = [];
+        const seq = ++clickSeqRef.current;
+
+        const byKey = new Map();
+        wirePaths.forEach((w)=>{
+          const key = `${w.for}|${w.to}`;
+          byKey.set(key, {start:w.pts[0], end:w.pts[w.pts.length-1]});
+        });
+
+        wirePaths.forEach((w, idx)=>{
+          if (!(w.for === tileId || w.to === tileId)) return;
+          const key = `${w.for}|${w.to}`;
+
+          if (FLASH_MODE === "random") {
+            perEdge.set(key, { type:"color", color: randomVivid() });
+          } else if (FLASH_MODE === "gradient") {
+            const s = byKey.get(key).start, e = byKey.get(key).end;
+            const id = `grad-${seq}-${idx}`;
+            const c1 = randomVivid(), c2 = randomVivid();
+            grads.push({ id, x1:s[0], y1:s[1], x2:e[0], y2:e[1], c1, c2 });
+            perEdge.set(key, { type:"gradient", id });
+          } else {
+            perEdge.set(key, { type:"color", color: "var(--flash)" });
+          }
+        });
+
+        return { mode: FLASH_MODE, seq, perEdge, grads };
+      }
+
+      function clearClickFlash(){
+        if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+        setClickedId(null);
+        setFlashSpec(null);
+      }
+      function handleTileClick(tile, e){
+        e.preventDefault();
+        clearClickFlash(); setActive(null); setHoverId(null);
+        setClickedId(tile.id);
+        setFlashSpec(buildFlashSpecFor(tile.id));
+        clickTimerRef.current = setTimeout(()=>{ openPopup(tile); clearClickFlash(); }, FLASH_MS);
+      }
+      const isHovering = (id) => (clickedId ? false : (hoverId === id));
+
+      return (
+        <div className="wrap" ref={wrapRef} style={{position:"relative"}}>
+          <h1>Alex DeFalco — FPGA Grid (popup)</h1>
+          <p className="sub">
+            Click a tile: its incoming/outgoing connections {FLASH_MODE==="solid" ? "turn lime" : FLASH_MODE==="random" ? "pick random colors" : "get per-wire gradients"}, then the popup appears.
+          </p>
+
+          <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:"auto",boxShadow:"0 12px 36px rgba(0,0,0,.35)",borderRadius:14}}
+               role="grid" aria-label="FPGA-style navigation">
+
+            <defs>
+              <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+                <feMerge><feMergeNode in="blur"/></feMerge>
+              </filter>
+
+              {flashSpec?.grads?.map(g=>(
+                <linearGradient key={g.id} id={g.id} gradientUnits="userSpaceOnUse"
+                  x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2}>
+                  <stop offset="0%"   stopColor={g.c1}/>
+                  <stop offset="100%" stopColor={g.c2}/>
+                </linearGradient>
+              ))}
+            </defs>
+
+            <g>
+              {wirePaths.map((w,i)=>{
+                const flashing = clickedId && (w.for === clickedId || w.to === clickedId);
+                const hotHover = !clickedId && (hoverId && isRelated(w, hoverId));
+
+                let flashStroke = "var(--flash)";
+                if (flashing && flashSpec) {
+                  const spec = flashSpec.perEdge.get(`${w.for}|${w.to}`);
+                  if (spec?.type === "gradient") flashStroke = `url(#${spec.id})`;
+                  else if (spec?.type === "color") flashStroke = spec.color;
+                }
+
+                const stroke = flashing ? flashStroke : (hotHover ? "var(--wire-hot)" : "var(--wire)");
+                const width  = flashing ? 3 : (hotHover ? 3 : 2);
+                const opacityBase = hotHover ? 0.95 : 0.55;
+                const opacity = flashing ? 0.98 : (w.ready ? opacityBase : 0.12);
+
+                return (
+                  <g key={i}>
+                    {flashing && (
+                      <polyline
+                        className="wireHalo animate"
+                        points={w.pts.map(([x,y])=>`${x},${y}`).join(" ")}
+                        fill="none"
+                        stroke={flashStroke}
+                        strokeWidth={15}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+                    <polyline
+                      className={`wire ${flashing ? "wire--flash" : ""}`}
+                      points={w.pts.map(([x,y])=>`${x},${y}`).join(" ")}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={width}
+                      opacity={opacity}
+                      strokeLinejoin="round" strokeLinecap="butt"
+                    />
+                  </g>
+                );
+              })}
+            </g>
+
+            {Array.from({length: rows}).map((_,r)=>
+              Array.from({length: cols}).map((__,c)=>{
+                const {x,y,w:ww,h:hh} = cellRect(r,c);
+                return (
+                  <rect key={`bg-${r}-${c}`} x={x} y={y} width={ww} height={hh} rx={6}
+                        fill="#e5e7eb" opacity="0.12" stroke="var(--stroke)" strokeWidth="1"/>
+                );
+              })
+            )}
+
+            {tiles.map((t)=>{
+              const {x,y,w:tw,h:th} = tileRectFor(t);
+              const isHot = isHovering(t.id);
+              const colActive = t.c <= activeCol;
+              const baseOpacity = colActive ? 1 : 0.15;
+
+              return (
+                <a key={t.id} href={t.href||"#"} tabIndex={0} aria-label={t.label}
+                   onMouseEnter={()=>!clickedId && setHoverId(t.id)} onMouseLeave={()=>setHoverId(null)}
+                   onFocus={()=>!clickedId && setHoverId(t.id)} onBlur={()=>setHoverId(null)}
+                   onClick={(e)=>handleTileClick(t, e)} style={{outline:"none", cursor:"pointer"}}>
+                  <rect x={x} y={y} width={tw} height={th} rx={6}
+                        fill={fillFor(t)}
+                        opacity={isHot ? 1 : baseOpacity*0.95}
+                        stroke={isHot ? "var(--hot)" : "var(--stroke)"} strokeWidth={isHot?2:1}
+                        style={{transition:"opacity .18s ease, stroke .18s ease, transform .18s ease",
+                                transform: isHot ? "translateY(-1px)" : "none",
+                                filter: isHot ? "drop-shadow(0 0 8px rgba(255,255,255,.25))" : "none"}} />
+                  <Label t={t} x={x} y={y} tw={tw} th={th} fontSize={fontSize} opacity={colActive?0.9:0} />
+                </a>
+              );
+            })}
+          </svg>
+
+          <div className={`overlay ${active ? "open" : ""}`} aria-hidden={!active} onClick={(e)=>{ if(e.target === e.currentTarget) closePopup(); }}>
+            {active && popupRect && (
+              <div className="popup" role="dialog" aria-modal="true"
+                   style={{left: popupRect.left, top: popupRect.top, width: popupRect.width, height: popupRect.height}}>
+                <div className="popup-content">
+                  <div className="popup-header">
+                    <div>
+                      {active.label}
+                      <span className="tag">{active.kind ?? "Tile"}</span>
+                    </div>
+                    <button className="close-btn" onClick={closePopup} autoFocus aria-label="Close">✕ Close</button>
+                  </div>
+                  <PopupBody tile={active}/>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {hoverId && !clickedId && (() => {
+            const t = tiles.find(x=>x.id===hoverId);
+            return <div className="tooltip">{t?.label}</div>;
+          })()}
+        </div>
+      );
+    }
+
+    /* ---------- Sample data with per-tile content ---------- */
+    const tiles = [
+      { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
+        content: { type:"text", title:"About Me", text:"Hi! I’m Alex. I work on FPGA/architecture projects, and I like turning RTL and CAD ideas into interactive visuals like this page.\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nTest " }
+      },
+      { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
+        content: { type:"list", title:"How this works", items:[
+          "Tiles = CLBs/IO/DSP/BRAM styles",
+          "Wires route only in inter-tile channels",
+          "Click: flash connections, then open card",
+          "Labels support manual newlines (\\n)"
+        ], note:"Source is a single HTML file using React + inline Babel." }
+      },
+      { id:"resume", r:0, c:0, label:"My\nResume", kind:"DSP", spanR:2, spanC:1,
+        content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
+        popup:  { coverMode:"ratio", widthRatio:1.05, heightRatio:1.325, anchorY:"keepTop" }  /* grow downward */
+      },
+      { id:"research", r:3, c:0, label:"Research\nExperience", kind:"DSP", spanR:2, spanC:1,
+        content: { type:"html", html:"<p><b>Areas:</b> eFPGA fabrics, on-chip networks, cache coherence, reliability.<br/>Ask me about gem5, SECDED, and CAD flows.</p>" }
+      },
+      { id:"intern", r:0, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
+        content: { type:"list", title:"Highlights", items:[
+          "Hardware prototyping on FPGA",
+          "Timing closure + floorplanning",
+          "Verification (UVM/SystemVerilog)"
+        ]}
+      },
+      { id:"Projects", r:3, c:4, label:"My\nProjects", kind:"DSP", spanR:2, spanC:1,
+        content: { type:"jsx", render: () => (
+          <div className="fill" style={{display:"flex",flexDirection:"column",gap:8}}>
+            <p><strong>Pinned:</strong></p>
+            <ul style={{margin:"0 0 8px 18px"}}>
+              <li>SECDED Project (ECC on cache lines)</li>
+              <li>eFPGA fabric visualization</li>
+              <li>Coherence + LLC experiments in gem5</li>
+            </ul>
+            <div className="iframeWrap fill">
+              <iframe src="about:blank" title="placeholder"></iframe>
+            </div>
+          </div>
+        )}
+      },
+      { id:"p1", r:0, c:1, label:"SECDED\nProject", kind:"PROJ",
+        content: { type:"text", title:"SECDED Project", text:"Single Error Correct / Double Error Detect pipeline for cache lines; scrubber + syndrome visualizer." }
+      },
+      { id:"involvement", r:1, c:3, label:"Student\nInvolvement", kind:"IO",
+        content: { type:"text", title:"Student Involvement", text:"IEEE/ACM chapter events, hackathons, and mentoring undergrads on HDL basics." }
+      },
+      { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
+        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
+      },
+    ];
+
+    const links = [
+      {for:"resume", to:"About Me"},
+      {for:"research", to:"About Me"},
+      {for:"intern", to:"About Me"},
+      {for:"website", to:"About Me"},
+      {for:"involvement", to:"About Me"}
+    ];
+
+    function App(){ return <FPGAHome rows={5} cols={5} tiles={tiles} links={links}/>; }
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
