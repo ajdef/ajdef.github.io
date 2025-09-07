@@ -22,6 +22,24 @@
       font-size:12px;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}
     a:focus{outline:2px solid #60a5fa;outline-offset:2px}
 
+    /* Header row with right-aligned LEDs */
+    .header-row{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; margin:0 0 8px;
+    }
+    .status-leds{
+      display:inline-flex; align-items:center; gap:16px;
+      background:#0b1224; border:1px solid #243044; border-radius:8px;
+      padding:6px 10px; box-shadow:0 6px 18px rgba(0,0,0,.12) inset;
+      font-size:12px; color:#cbd5e1; white-space:nowrap;
+    }
+    .status-led{ display:inline-flex; align-items:center; gap:6px; }
+    .status-dot{
+      width:10px; height:10px; border-radius:50%;
+      border:1px solid #334155; box-shadow:0 0 0 rgba(0,0,0,0);
+    }
+    .status-dot.on{ box-shadow:0 0 10px currentColor; }
+
     /* Popup / overlay */
     .overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
       background: var(--overlay-bg); backdrop-filter: blur(2px); z-index: 5; }
@@ -113,6 +131,24 @@
       if (typeof v === "string" && v.endsWith("%")) return (parseFloat(v)/100) * ref;
       if (Number.isFinite(v)) return v;
       return 0;
+    }
+
+    /* --- Small LED panel component --- */
+    function StatusLEDs({ busy }) {
+      const busyColor = busy ? "#ef4444" : "#1f2937";   // red when ON, slate when OFF
+      const doneColor = !busy ? "#22c55e" : "#1f2937";  // green when ON
+      return (
+        <div className="status-leds" aria-label="Status LEDs">
+          <div className="status-led" aria-label={`Busy ${busy ? "on" : "off"}`}>
+            <span className={`status-dot ${busy ? "on" : ""}`} style={{color:busyColor, background:busyColor}} />
+            <span>BUSY</span>
+          </div>
+          <div className="status-led" aria-label={`Done ${!busy ? "on" : "off"}`}>
+            <span className={`status-dot ${!busy ? "on" : ""}`} style={{color:doneColor, background:doneColor}} />
+            <span>DONE</span>
+          </div>
+        </div>
+      );
     }
 
     /* --- Wave helpers --- */
@@ -219,7 +255,7 @@
       const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge, grads, tileHaloById}
       const clickTimerRef = useRef(null);
       const clickSeqRef   = useRef(0);
-      // NEW: timer for end-glow auto-clear
+      // timer for end-glow auto-clear
       const endGlowTimerRef = useRef(null);
 
       // close on ESC
@@ -228,7 +264,7 @@
         window.addEventListener("keydown", onKey);
         return ()=>window.removeEventListener("keydown", onKey);
       }, []);
-      // unmount cleanup (extended to clear end-glow timer)
+      // unmount cleanup (clear timers)
       useEffect(()=>()=> {
         clearClickFlash();
         if (endGlowTimerRef.current) clearTimeout(endGlowTimerRef.current);
@@ -296,7 +332,7 @@
         const dedup = [pts[0]];
         for (let i=1;i<pts.length;i++){
           const [ax,ay]=dedup[dedup.length-1], [bx,by]=pts[i];
-        if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
+          if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
         }
         const out = [dedup[0]];
         for (let i=1;i<dedup.length-1;i++){
@@ -480,10 +516,21 @@
 
         if (endGlowTimerRef.current) clearTimeout(endGlowTimerRef.current);
         endGlowTimerRef.current = setTimeout(() => {
-          clearClickFlash();                 // <-- restore neutral wire color
+          clearClickFlash();                 // restore neutral wire color
           endGlowTimerRef.current = null;
         }, END_GLOW_MS);
       }, [wirePaths, clickedId, active]);
+
+      /* --- BUSY/DONE logic: BUSY is ON during wave draw, any flash, or popup --- */
+      const waveInProgress = useMemo(() => {
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduce) return false;                                     // skip on reduced motion
+        if (!waveStartRef.current) return true;                        // just mounted, treat as busy
+        if (wirePaths.length === 0) return true;                       // before routes are computed
+        return wirePaths.some(w => w.prog < 1);                        // any wire still drawing
+      }, [wirePaths]);
+
+      const busy = Boolean(clickedId || active || waveInProgress);
 
       /* Popup helpers */
       const openPopup = (tile, evt) => {
@@ -503,7 +550,7 @@
         const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
         const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
         const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
-        const sOffY  = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
+        const sOffY = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
 
         const leftStart = (svgBox.left - wrapBox.left) + x + sOffX + PAD;
         const topStart  = (svgBox.top  - wrapBox.top)  + y + sOffY + PAD;
@@ -551,7 +598,12 @@
 
       return (
         <div className="wrap" ref={wrapRef} style={{position:"relative"}}>
-          <h1>Alex DeFalco — FPGA Grid (popup)</h1>
+          {/* Header row with LEDs on the right */}
+          <div className="header-row">
+            <h1 style={{margin:0,fontSize:20,color:"#cbd5e1"}}>Alex DeFalco — FPGA Grid (popup)</h1>
+            <StatusLEDs busy={busy} />
+          </div>
+
           <p className="sub">
             Click a tile: its incoming/outgoing connections {FLASH_MODE==="solid" ? "turn lime" : FLASH_MODE==="random" ? "pick random colors" : "get per-wire gradients"}, then the popup appears.
           </p>
@@ -841,6 +893,3 @@
   </script>
 </body>
 </html>
-
-
-
