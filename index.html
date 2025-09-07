@@ -10,7 +10,7 @@
       --tile:#fb923c; --dsp:#6aa9ff; --bram:#a78bfa; --io:#34d399;
       --wire:#94a3b8; --wire-hot:#f8fafc; --proj:#568d94; --rsch:#7458c2;
       --overlay-bg: rgba(4,7,12,.55);
-      --flash:#84cc16; /* lime-500 (used when FLASH_MODE === "solid") */
+      --flash:#84cc16;
     }
     html,body{margin:0;height:100%;background:#0b0f15;color:var(--ink);
       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial}
@@ -48,7 +48,7 @@
     .wire--flash { filter: drop-shadow(0 0 8px rgba(132,204,22,.45)); }
 
     .wireHalo, .tileHalo { opacity: 0; filter: url(#softGlow); pointer-events:none; }
-    .wireHalo.animate, .tileHalo.animate { animation: haloPulse 900ms ease-out forwards; }
+    .wireHalo.animate, .tileHalo.animate { animation: haloPulse 1200ms ease-out forwards; }
 
     @keyframes haloPulse { 0% {opacity:0;} 35% {opacity:.95;} 100% {opacity:0;} }
   </style>
@@ -68,7 +68,7 @@
     const COVER_MODE  = "full";      // "full" | "ratio"
     const COVER_RATIO = 0.9;         // width ratio when COVER_MODE === "ratio"
     const HEIGHT_RATIO = COVER_RATIO; // default height ratio
-    const FLASH_MS    = 1200;        // highlight duration before popup
+    const FLASH_MS    = 1200;        // click highlight duration before popup
     const FLASH_MODE  = "gradient";  // "solid" | "random" | "gradient"
 
     /* ===== Global scaling (tiles + gaps + label font) ===== */
@@ -81,8 +81,8 @@
     const gap       = Math.round(BASE_GAP  * SCALE);
     const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE));
 
-    /* === New: extra padding so halos aren't clipped at edges === */
-    const PAD = 28; // tweak this if you want larger/smaller halo room
+    /* margin so halos aren't clipped at edges */
+    const PAD = 28;
 
     /* --- Text helpers (manual newline support) --- */
     function splitLines(label){ return String(label ?? "").split(/\r?\n/); }
@@ -100,7 +100,6 @@
       );
     }
 
-    /* helper: px numbers or "%" strings for offsets */
     function pxOrPct(v, ref) {
       if (typeof v === "string" && v.endsWith("%")) return (parseFloat(v)/100) * ref;
       if (Number.isFinite(v)) return v;
@@ -193,7 +192,7 @@
 
       // click highlight state
       const [clickedId, setClickedId]   = useState(null);
-      const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge, grads, tileHalo}
+      const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge, grads, tileHaloById}
       const clickTimerRef = useRef(null);
       const clickSeqRef   = useRef(0);
 
@@ -220,7 +219,7 @@
         return ()=>clearInterval(t);
       },[cols]);
 
-      // geometry (uses scaled size/gap)
+      // geometry
       const w = cols*size + (cols-1)*gap;
       const h = rows*size + (rows-1)*gap;
 
@@ -253,7 +252,7 @@
         const dedup = [pts[0]];
         for (let i=1;i<pts.length;i++){
           const [ax,ay]=dedup[dedup.length-1], [bx,by]=pts[i];
-        if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
+          if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
         }
         const out = [dedup[0]];
         for (let i=1;i<dedup.length-1;i++){
@@ -328,13 +327,15 @@
 
       const isRelated = (wire, tid) => wire.for===tid || wire.to===tid;
 
-      /* ===== Build per-click flash spec (wires + TILE HALO) ===== */
+      /* ===== Build per-click (or all) flash spec ===== */
+      const ALL_ID = "__ALL__";
       const rand = (a,b)=>a + Math.random()*(b-a);
       const randomVivid = ()=>`hsl(${Math.floor(rand(0,360))}deg, 80%, 62%)`;
 
       function buildFlashSpecFor(tileId){
         const perEdge = new Map();
         const grads = [];
+        const tileHaloById = new Map();
         const seq = ++clickSeqRef.current;
 
         const byKey = new Map();
@@ -343,8 +344,10 @@
           byKey.set(key, {start:w.pts[0], end:w.pts[w.pts.length-1]});
         });
 
+        // Wires
         wirePaths.forEach((w, idx)=>{
-          if (!(w.for === tileId || w.to === tileId)) return;
+          const include = (tileId === ALL_ID) || (w.for === tileId || w.to === tileId);
+          if (!include) return;
           const key = `${w.for}|${w.to}`;
 
           if (FLASH_MODE === "random") {
@@ -360,32 +363,31 @@
           }
         });
 
-        /* Tile halo: match wire style (gradient/random/solid) */
-        let tileHalo = null;
-        const t = tileById.get(tileId);
-        if (t) {
+        // Tile halos
+        const targetTiles = (tileId === ALL_ID) ? tiles : [tileById.get(tileId)].filter(Boolean);
+        for (const t of targetTiles) {
           if (FLASH_MODE === "gradient") {
             const {x,y,w,h} = tileRectFor(t);
-            const id = `tilegrad-${seq}`;
+            const id = `tilegrad-${seq}-${t.id}`;
             const c1 = randomVivid(), c2 = randomVivid();
             grads.push({ id, x1:x, y1:y, x2:x+w, y2:y+h, c1, c2 });
-            tileHalo = { type:"gradient", id };
+            tileHaloById.set(t.id, { type:"gradient", id });
           } else if (FLASH_MODE === "random") {
-            tileHalo = { type:"color", color: randomVivid() };
+            tileHaloById.set(t.id, { type:"color", color: randomVivid() });
           } else {
-            tileHalo = { type:"color", color: "var(--flash)" };
+            tileHaloById.set(t.id, { type:"color", color: "var(--flash)" });
           }
         }
 
-        return { mode: FLASH_MODE, seq, perEdge, grads, tileHalo };
+        return { mode: FLASH_MODE, seq, perEdge, grads, tileHaloById };
       }
 
-      /* click → flash (1.2s) → popup */
       function clearClickFlash(){
         if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
         setClickedId(null);
         setFlashSpec(null);
       }
+
       function handleTileClick(tile, e){
         e.preventDefault();
         clearClickFlash(); setActive(null); setHoverId(null);
@@ -394,6 +396,24 @@
         clickTimerRef.current = setTimeout(()=>{ openPopup(tile); clearClickFlash(); }, FLASH_MS);
       }
       const isHovering = (id) => (clickedId ? false : (hoverId === id));
+
+      /* ===== One-time startup flash: ALL tiles & wires simultaneously ===== */
+      const demoAllOnce = useRef(false);
+      useEffect(() => {
+        if (demoAllOnce.current) return;
+        demoAllOnce.current = true;
+
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduce) return;
+
+        const t = setTimeout(() => {
+          setClickedId(ALL_ID);
+          setFlashSpec(buildFlashSpecFor(ALL_ID));
+          setTimeout(() => { clearClickFlash(); }, 1000);
+        }, 300); // small delay to let grid mount
+
+        return () => clearTimeout(t);
+      }, [tiles]);
 
       /* Popup helpers */
       const openPopup = (tile, evt) => {
@@ -405,11 +425,11 @@
         const svgBox  = svgRef.current.getBoundingClientRect();
 
         const overrides = tile.popup || tile.content || {};
-        const mode   = overrides.coverMode  ?? COVER_MODE;      // "full" | "ratio"
-        const ratioW = overrides.coverRatio ?? COVER_RATIO;     // width ratio
-        const ratioH = overrides.heightRatio ?? HEIGHT_RATIO;   // height ratio
-        const pxW    = overrides.width;                         // px width (optional)
-        const pxH    = overrides.height;                        // px height (optional)
+        const mode   = overrides.coverMode  ?? COVER_MODE;
+        const ratioW = overrides.coverRatio ?? COVER_RATIO;
+        const ratioH = overrides.heightRatio ?? HEIGHT_RATIO;
+        const pxW    = overrides.width;
+        const pxH    = overrides.height;
         const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
         const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
         const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
@@ -466,7 +486,6 @@
             Click a tile: its incoming/outgoing connections {FLASH_MODE==="solid" ? "turn lime" : FLASH_MODE==="random" ? "pick random colors" : "get per-wire gradients"}, then the popup appears.
           </p>
 
-          {/* viewBox expanded by PAD on each side; actual grid translated by PAD */}
           <svg
             ref={svgRef}
             viewBox={`0 0 ${w + PAD*2} ${h + PAD*2}`}
@@ -474,12 +493,27 @@
             role="grid" aria-label="FPGA-style navigation"
           >
             <defs>
-              {/* bigger filter region to allow fatter glow */}
+              {/* bigger region to avoid clipping halos/shadows */}
               <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
                 <feMerge><feMergeNode in="blur"/></feMerge>
               </filter>
 
+              {/* stacked tile shadow for depth */}
+              <filter id="tileShadow" x="-40%" y="-40%" width="180%" height="180%">
+                <feDropShadow dx="0" dy="2" stdDeviation="1.6" floodColor="#000" floodOpacity="0.28"/>
+                <feDropShadow dx="0" dy="8" stdDeviation="6"   floodColor="#000" floodOpacity="0.18"/>
+              </filter>
+
+              {/* subtle bevel/sheen overlay */}
+              <linearGradient id="tileShade" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"  stopColor="#FFFFFF" stopOpacity="0.16"/>
+                <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.04"/>
+                <stop offset="58%" stopColor="#000000" stopOpacity="0.04"/>
+                <stop offset="100%" stopColor="#000000" stopOpacity="0.12"/>
+              </linearGradient>
+
+              {/* dynamic gradients for wire/tile glow (coords adjusted by PAD) */}
               {flashSpec?.grads?.map(g=>(
                 <linearGradient key={g.id} id={g.id} gradientUnits="userSpaceOnUse"
                   x1={g.x1 + PAD} y1={g.y1 + PAD} x2={g.x2 + PAD} y2={g.y2 + PAD}>
@@ -489,13 +523,14 @@
               ))}
             </defs>
 
-            {/* shift whole grid by PAD so we have margin for glow */}
+            {/* shift grid by PAD so halos/shadows have breathing room */}
             <g transform={`translate(${PAD},${PAD})`}>
 
               {/* WIRES */}
               <g>
                 {wirePaths.map((wPath,i)=>{
-                  const flashing = clickedId && (wPath.for === clickedId || wPath.to === clickedId);
+                  const flashingAll = clickedId === ALL_ID;
+                  const flashing = flashingAll || (clickedId && (wPath.for === clickedId || wPath.to === clickedId));
                   const hotHover = !clickedId && (hoverId && isRelated(wPath, hoverId));
 
                   let flashStroke = "var(--flash)";
@@ -554,14 +589,14 @@
                 const isHot = isHovering(t.id);
                 const colActive = t.c <= activeCol;
                 const baseOpacity = colActive ? 1 : 0.15;
-                const tileFlashing = clickedId === t.id;
+                const tileFlashing = (clickedId === t.id) || (clickedId === ALL_ID);
 
-                // compute halo stroke for tile (match wire style)
                 let haloStroke = null;
-                if (tileFlashing && flashSpec?.tileHalo) {
-                  haloStroke = (flashSpec.tileHalo.type === "gradient")
-                    ? `url(#${flashSpec.tileHalo.id})`
-                    : (flashSpec.tileHalo.color || "var(--flash)");
+                const haloSpec = flashSpec?.tileHaloById?.get(t.id);
+                if (tileFlashing && haloSpec) {
+                  haloStroke = (haloSpec.type === "gradient")
+                    ? `url(#${haloSpec.id})`
+                    : (haloSpec.color || "var(--flash)");
                 }
 
                 return (
@@ -577,14 +612,19 @@
                         fill="none" stroke={haloStroke} strokeWidth="16" />
                     )}
 
-                    {/* base tile */}
+                    {/* base tile with depth shadow */}
                     <rect x={x} y={y} width={tw} height={th} rx={6}
                           fill={fillFor(t)}
                           opacity={isHot ? 1 : baseOpacity*0.95}
                           stroke={isHot ? "var(--hot)" : "var(--stroke)"} strokeWidth={isHot?2:1}
+                          filter="url(#tileShadow)"
                           style={{transition:"opacity .18s ease, stroke .18s ease, transform .18s ease",
-                                  transform: isHot ? "translateY(-1px)" : "none",
-                                  filter: isHot ? "drop-shadow(0 0 8px rgba(255,255,255,.25))" : "none"}} />
+                                  transform: isHot ? "translateY(-1px)" : "none"}} />
+
+                    {/* bevel/sheen overlay (non-interactive) */}
+                    <rect x={x} y={y} width={tw} height={th} rx={6}
+                          fill="url(#tileShade)" pointerEvents="none" />
+
                     <Label t={t} x={x} y={y} tw={tw} th={th} fontSize={fontSize} opacity={colActive?0.9:0} />
                   </a>
                 );
@@ -680,6 +720,9 @@
       },
       { id:"p3", r:1, c:2, label:"Hardware\nTrojan\nDesign", kind:"PROJ",
         content: { type:"text", title:"FPGA-Based Custom Hardware Trojan Implementation", text:"Placeholder" }
+      },
+      { id:"p4", r:1, c:1, label:"Cache\nCoherency\nAttack", kind:"PROJ",
+        content: { type:"text", title:"FPGA-Based Side-Channel Attack", text:"Placeholder" }
       },
     ];
 
