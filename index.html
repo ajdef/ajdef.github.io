@@ -219,6 +219,8 @@
       const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge, grads, tileHaloById}
       const clickTimerRef = useRef(null);
       const clickSeqRef   = useRef(0);
+      // NEW: timer for end-glow auto-clear
+      const endGlowTimerRef = useRef(null);
 
       // close on ESC
       useEffect(()=>{
@@ -226,7 +228,11 @@
         window.addEventListener("keydown", onKey);
         return ()=>window.removeEventListener("keydown", onKey);
       }, []);
-      useEffect(()=>()=> clearClickFlash(), []);
+      // unmount cleanup (extended to clear end-glow timer)
+      useEffect(()=>()=> {
+        clearClickFlash();
+        if (endGlowTimerRef.current) clearTimeout(endGlowTimerRef.current);
+      }, []);
 
       // bitstream-style column sweep (one-time)
       const [activeCol, setActiveCol] = useState(-1);
@@ -455,7 +461,7 @@
       }
       const isHovering = (id) => (clickedId ? false : (hoverId === id));
 
-      /* ===== NEW: One-time glow burst after all wires finish drawing ===== */
+      /* ===== One-time glow burst after all wires finish drawing (auto-clears) ===== */
       const endGlowOnce = useRef(false);
       useEffect(() => {
         if (endGlowOnce.current) return;
@@ -465,14 +471,18 @@
         const allDone = wirePaths.length > 0 && wirePaths.every(w => w.prog >= 1 && w.readyCol);
         if (!allDone) return;
 
-        // If user is interacting, wait (don’t set the once-flag yet)
+        // If user is interacting, skip the end glow
         if (clickedId || active) return;
 
         endGlowOnce.current = true;
         setClickedId(ALL_ID);
         setFlashSpec(buildFlashSpecFor(ALL_ID));
-        const t = setTimeout(() => { clearClickFlash(); }, END_GLOW_MS);
-        return () => clearTimeout(t);
+
+        if (endGlowTimerRef.current) clearTimeout(endGlowTimerRef.current);
+        endGlowTimerRef.current = setTimeout(() => {
+          clearClickFlash();                 // <-- restore neutral wire color
+          endGlowTimerRef.current = null;
+        }, END_GLOW_MS);
       }, [wirePaths, clickedId, active]);
 
       /* Popup helpers */
