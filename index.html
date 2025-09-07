@@ -673,21 +673,36 @@
           "Labels support manual newlines (\\n)"
         ], note:"Source is a single HTML file using React + inline Babel." }
       },
-      { id:"resume", r:0, c:0, label:"My\nResume", kind:"DSP", spanR:2, spanC:1,
+
+      { id:"resume", r:0, c:0, label:"My\nResume", kind:"IO", spanR:2, spanC:1,
         content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
         popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.45, anchorTop:true, startOffsetY:0, offsetY:-80 }
       },
-      { id:"research", r:3, c:0, label:"Research\nExperience", kind:"DSP", spanR:2, spanC:1,
+
+      { id:"research", r:3, c:0, label:"Research\nExperience", kind:"rsch", spanR:2, spanC:1,
         content: { type:"html", html:"<p><b>Areas:</b> eFPGA fabrics, on-chip networks, cache coherence, reliability.<br/>Ask me about gem5, SECDED, and CAD flows.</p>" }
       },
-      { id:"intern", r:0, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
+      { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
+        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
+      },
+      { id:"ZKPs", r:4, c:1, label:"ZKPs", kind:"rsch",
+        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
+      },
+
+
+
+      { id:"intern", r:3, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
         content: { type:"list", title:"Highlights", items:[
           "Hardware prototyping on FPGA",
           "Timing closure + floorplanning",
           "Verification (UVM/SystemVerilog)"
         ]}
       },
-      { id:"Projects", r:3, c:4, label:"My\nProjects", kind:"DSP", spanR:2, spanC:1,
+      { id:"NG", r:2, c:3, label:"Northrop\nGrumman\nSummer\n2025", kind:"DSP",
+        content: { type:"text", title:"Summer Internship with Northrop Grumman", text:"Placeholder." }
+      },
+
+      { id:"Projects", r:0, c:4, label:"My\nProjects", kind:"PROJ", spanR:2, spanC:1,
         content: { type:"jsx", render: () => (
           <div className="fill" style={{display:"flex",flexDirection:"column",gap:8}}>
             <p><strong>Pinned:</strong></p>
@@ -703,26 +718,34 @@
         )}
       },
       
-      { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
-        content: { type:"text", title:"Student Involvement", text:"IEEE/ACM chapter events, hackathons, and mentoring undergrads on HDL basics." }
-      },
-      { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
-        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
-      },
-      { id:"ZKPs", r:4, c:1, label:"ZKPs", kind:"rsch",
-        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
-      },
+     
+      
       { id:"p1", r:0, c:1, label:"SECDED\nModule\nDesign", kind:"PROJ",
         content: { type:"text", title:"SECDED Project", text:"Single Error Correct / Double Error Detect pipeline for cache lines; scrubber + syndrome visualizer." }
       },
       { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension", kind:"PROJ",
         content: { type:"text", title:"Senior Design Capstone: SCALER RISC-V Extension", text:"Placeholder" }
       },
-      { id:"p3", r:1, c:2, label:"Hardware\nTrojan\nDesign", kind:"PROJ",
+      { id:"p3", r:1, c:2, label:"FPGA\nTrojan\nDesign", kind:"PROJ",
         content: { type:"text", title:"FPGA-Based Custom Hardware Trojan Implementation", text:"Placeholder" }
       },
       { id:"p4", r:1, c:1, label:"Cache\nCoherency\nAttack", kind:"PROJ",
         content: { type:"text", title:"FPGA-Based Side-Channel Attack", text:"Placeholder" }
+      },
+      { id:"p5", r:0, c:2, label:"Range-\nFinder\nPCB\nDesign", kind:"PROJ",
+        content: { type:"text", title:"Rangefinder PCB Design", text:"Placeholder" }
+      },
+
+
+      { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
+        content: { type:"text", title:"Student Involvement", text:"IEEE/ACM chapter events, hackathons, and mentoring undergrads on HDL basics." }
+      },
+
+      { id:"skills", r:3, c:1, label:"My\nSkills", kind:"IO",
+        content: { type:"text", title:"My Skills", text:"Placeholder" }
+      },
+      { id:"courses", r:3, c:3, label:"Relevant\nCourses", kind:"IO",
+        content: { type:"text", title:"Relevant Courses", text:"Placeholder" }
       },
     ];
 
@@ -737,9 +760,16 @@
       {for:"Projects", to:"p2"},
       {for:"Projects", to:"p3"},
       {for:"Projects", to:"p4"},
+      {for:"Projects", to:"p5"},
 
       {for:"research", to:"eFPGA"},
-      {for:"research", to:"ZKPs"}
+      {for:"research", to:"ZKPs"},
+
+      {for:"About Me", to: "courses"},
+      {for:"About Me", to: "skills"},
+      {for:"About Me", to: "Projects"},
+
+      {for:"intern", to:"NG"},
     ];
 
     function App(){ return <FPGAHome rows={5} cols={5} tiles={tiles} links={links}/>; }
