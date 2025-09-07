@@ -71,6 +71,15 @@
     const FLASH_MS    = 1200;        // click highlight duration before popup
     const FLASH_MODE  = "gradient";  // "solid" | "random" | "gradient"
 
+    /* --- Initial "wave draw" of traces --- */
+    const WAVE_FROM_ID        = "About Me"; // origin tile
+    const WAVE_START_DELAY_MS = 300;        // wait after mount
+    const WAVE_RING_STEP_MS   = 160;        // delay per ring from origin
+    const WAVE_DRAW_MS        = 600;        // duration each wire draws
+
+    /* --- Post-wave global glow duration (matches CSS haloPulse) --- */
+    const END_GLOW_MS = 1200;
+
     /* ===== Global scaling (tiles + gaps + label font) ===== */
     const SCALE      = 1.5;
     const BASE_SIZE  = 56;
@@ -105,6 +114,21 @@
       if (Number.isFinite(v)) return v;
       return 0;
     }
+
+    /* --- Wave helpers --- */
+    function centerOf(t){
+      const c = t.c + (t.spanC ?? 1)/2;
+      const r = t.r + (t.spanR ?? 1)/2;
+      return [c,r];
+    }
+    function ringFromTo(a,b){ return Math.max(Math.abs(a[0]-b[0]), Math.abs(a[1]-b[1])); } // chebyshev
+    function pathLen(pts){
+      let L=0; for(let i=1;i<pts.length;i++){
+        const dx=pts[i][0]-pts[i-1][0], dy=pts[i][1]-pts[i-1][1];
+        L += Math.hypot(dx,dy);
+      } return L;
+    }
+    function easeInOut(t){ return 0.5*(1-Math.cos(Math.PI*Math.max(0,Math.min(1,t)))); }
 
     /* ---- Popup content renderer (per-tile) ---- */
     function PopupBody({ tile }) {
@@ -219,6 +243,20 @@
         return ()=>clearInterval(t);
       },[cols]);
 
+      /* --- Wave clock for initial trace draw --- */
+      const waveStartRef = useRef(null);
+      const [waveNow, setWaveNow] = useState(0);
+      useEffect(() => {
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduce) { setWaveNow(Number.POSITIVE_INFINITY); return; }
+        let raf;
+        const startAt = performance.now() + WAVE_START_DELAY_MS;
+        waveStartRef.current = startAt;
+        const tick = (t) => { setWaveNow(t); raf = requestAnimationFrame(tick); };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+      }, []);
+
       // geometry
       const w = cols*size + (cols-1)*gap;
       const h = rows*size + (rows-1)*gap;
@@ -252,7 +290,7 @@
         const dedup = [pts[0]];
         for (let i=1;i<pts.length;i++){
           const [ax,ay]=dedup[dedup.length-1], [bx,by]=pts[i];
-          if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
+        if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
         }
         const out = [dedup[0]];
         for (let i=1;i<dedup.length-1;i++){
@@ -313,17 +351,37 @@
           : compressPath([[sx,sy],[sx,yhStart],[xvEnd,yhStart],[xvEnd,dy],[dx,dy]]);
       }
 
+      /* --- Origin & ring map for wave --- */
+      const originTile = useMemo(() => tiles.find(t => t.id === WAVE_FROM_ID) ?? tiles[0], [tiles]);
+      const originCR   = useMemo(() => [originTile.c + (originTile.spanC ?? 1)/2,
+                                        originTile.r + (originTile.spanR ?? 1)/2], [originTile]);
+
+      const ringById = useMemo(() => {
+        const m = new Map();
+        tiles.forEach(t => m.set(t.id, ringFromTo([t.c + (t.spanC ?? 1)/2, t.r + (t.spanR ?? 1)/2], originCR)));
+        return m;
+      }, [tiles, originCR]);
+
       const wirePaths = useMemo(()=>{
         const out=[];
+        const startAt = waveStartRef.current ?? 0;
+
         for (const L of links){
           const s = tileById.get(L.for), d = tileById.get(L.to);
           if (!s || !d) continue;
-          const ready = (d.c <= activeCol);
+
           const pts = routeBetween(s,d);
-          out.push({ for:L.for, to:L.to, pts, ready });
+          const len = pathLen(pts);
+
+          const ring = Math.min(ringById.get(s.id) ?? 0, ringById.get(d.id) ?? 0);
+          const localMs = waveNow - startAt - ring*WAVE_RING_STEP_MS;
+          const prog = (Number.isFinite(localMs) ? Math.max(0, Math.min(1, localMs / WAVE_DRAW_MS)) : 1);
+
+          const readyCol = (d.c <= activeCol);
+          out.push({ for:L.for, to:L.to, pts, len, ring, prog, readyCol });
         }
         return out;
-      }, [links, tileById, activeCol]);
+      }, [links, tileById, ringById, activeCol, waveNow]);
 
       const isRelated = (wire, tid) => wire.for===tid || wire.to===tid;
 
@@ -397,23 +455,25 @@
       }
       const isHovering = (id) => (clickedId ? false : (hoverId === id));
 
-      /* ===== One-time startup flash: ALL tiles & wires simultaneously ===== */
-      const demoAllOnce = useRef(false);
+      /* ===== NEW: One-time glow burst after all wires finish drawing ===== */
+      const endGlowOnce = useRef(false);
       useEffect(() => {
-        if (demoAllOnce.current) return;
-        demoAllOnce.current = true;
-
+        if (endGlowOnce.current) return;
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduce) return;
 
-        const t = setTimeout(() => {
-          setClickedId(ALL_ID);
-          setFlashSpec(buildFlashSpecFor(ALL_ID));
-          setTimeout(() => { clearClickFlash(); }, 1000);
-        }, 300); // small delay to let grid mount
+        const allDone = wirePaths.length > 0 && wirePaths.every(w => w.prog >= 1 && w.readyCol);
+        if (!allDone) return;
 
+        // If user is interacting, wait (don’t set the once-flag yet)
+        if (clickedId || active) return;
+
+        endGlowOnce.current = true;
+        setClickedId(ALL_ID);
+        setFlashSpec(buildFlashSpecFor(ALL_ID));
+        const t = setTimeout(() => { clearClickFlash(); }, END_GLOW_MS);
         return () => clearTimeout(t);
-      }, [tiles]);
+      }, [wirePaths, clickedId, active]);
 
       /* Popup helpers */
       const openPopup = (tile, evt) => {
@@ -433,7 +493,7 @@
         const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
         const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
         const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
-        const sOffY = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
+        const sOffY  = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
 
         const leftStart = (svgBox.left - wrapBox.left) + x + sOffX + PAD;
         const topStart  = (svgBox.top  - wrapBox.top)  + y + sOffY + PAD;
@@ -493,19 +553,16 @@
             role="grid" aria-label="FPGA-style navigation"
           >
             <defs>
-              {/* bigger region to avoid clipping halos/shadows */}
               <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
                 <feMerge><feMergeNode in="blur"/></feMerge>
               </filter>
 
-              {/* stacked tile shadow for depth */}
               <filter id="tileShadow" x="-40%" y="-40%" width="180%" height="180%">
                 <feDropShadow dx="0" dy="2" stdDeviation="1.6" floodColor="#000" floodOpacity="0.28"/>
                 <feDropShadow dx="0" dy="8" stdDeviation="6"   floodColor="#000" floodOpacity="0.18"/>
               </filter>
 
-              {/* subtle bevel/sheen overlay */}
               <linearGradient id="tileShade" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%"  stopColor="#FFFFFF" stopOpacity="0.16"/>
                 <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.04"/>
@@ -513,7 +570,6 @@
                 <stop offset="100%" stopColor="#000000" stopOpacity="0.12"/>
               </linearGradient>
 
-              {/* dynamic gradients for wire/tile glow (coords adjusted by PAD) */}
               {flashSpec?.grads?.map(g=>(
                 <linearGradient key={g.id} id={g.id} gradientUnits="userSpaceOnUse"
                   x1={g.x1 + PAD} y1={g.y1 + PAD} x2={g.x2 + PAD} y2={g.y2 + PAD}>
@@ -523,9 +579,7 @@
               ))}
             </defs>
 
-            {/* shift grid by PAD so halos/shadows have breathing room */}
             <g transform={`translate(${PAD},${PAD})`}>
-
               {/* WIRES */}
               <g>
                 {wirePaths.map((wPath,i)=>{
@@ -542,8 +596,14 @@
 
                   const stroke = flashing ? flashStroke : (hotHover ? "var(--wire-hot)" : "var(--wire)");
                   const width  = flashing ? 3 : (hotHover ? 3 : 2);
-                  const opacityBase = hotHover ? 0.95 : 0.55;
-                  const opacity = flashing ? 0.98 : (wPath.ready ? opacityBase : 0.12);
+
+                  const baseMin = 0.12;
+                  const baseMax = hotHover ? 0.95 : 0.55;
+                  const fade    = flashing ? 1 : (baseMin + (baseMax - baseMin) * easeInOut(wPath.prog));
+                  const opacity = flashing ? 0.98 : (wPath.readyCol ? fade : baseMin);
+
+                  const dashArray  = flashing ? "none" : wPath.len;
+                  const dashOffset = flashing ? 0      : (1 - wPath.prog) * wPath.len;
 
                   return (
                     <g key={i}>
@@ -566,6 +626,7 @@
                         strokeWidth={width}
                         opacity={opacity}
                         strokeLinejoin="round" strokeLinecap="butt"
+                        style={{ strokeDasharray: dashArray, strokeDashoffset: dashOffset }}
                       />
                     </g>
                   );
@@ -605,14 +666,12 @@
                     onFocus={()=>!clickedId && setHoverId(t.id)} onBlur={()=>setHoverId(null)}
                     onClick={(e)=>handleTileClick(t, e)} style={{outline:"none", cursor:"pointer"}}>
 
-                    {/* TILE HALO (same glow behavior as wires) */}
                     {tileFlashing && haloStroke && (
                       <rect className="tileHalo animate"
                         x={x} y={y} width={tw} height={th} rx={6}
                         fill="none" stroke={haloStroke} strokeWidth="16" />
                     )}
 
-                    {/* base tile with depth shadow */}
                     <rect x={x} y={y} width={tw} height={th} rx={6}
                           fill={fillFor(t)}
                           opacity={isHot ? 1 : baseOpacity*0.95}
@@ -621,7 +680,6 @@
                           style={{transition:"opacity .18s ease, stroke .18s ease, transform .18s ease",
                                   transform: isHot ? "translateY(-1px)" : "none"}} />
 
-                    {/* bevel/sheen overlay (non-interactive) */}
                     <rect x={x} y={y} width={tw} height={th} rx={6}
                           fill="url(#tileShade)" pointerEvents="none" />
 
@@ -689,8 +747,6 @@
         content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
       },
 
-
-
       { id:"intern", r:3, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
         content: { type:"list", title:"Highlights", items:[
           "Hardware prototyping on FPGA",
@@ -717,9 +773,7 @@
           </div>
         )}
       },
-      
-     
-      
+
       { id:"p1", r:0, c:1, label:"SECDED\nModule\nDesign", kind:"PROJ",
         content: { type:"text", title:"SECDED Project", text:"Single Error Correct / Double Error Detect pipeline for cache lines; scrubber + syndrome visualizer." }
       },
@@ -735,7 +789,6 @@
       { id:"p5", r:0, c:2, label:"Range-\nFinder\nPCB\nDesign", kind:"PROJ",
         content: { type:"text", title:"Rangefinder PCB Design", text:"Placeholder" }
       },
-
 
       { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
         content: { type:"text", title:"Student Involvement", text:"IEEE/ACM chapter events, hackathons, and mentoring undergrads on HDL basics." }
