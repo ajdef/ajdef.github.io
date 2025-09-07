@@ -37,17 +37,19 @@
     .close-btn:hover { background: #1b2643; }
     .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #334155; background:#0b1224; margin-left:8px; color:#8fb4ff; }
 
-    /* helpers so media fills the popup nicely */
+    /* media wrappers */
     .fill { flex:1 1 auto; min-height:0; }
     .pdfWrap, .iframeWrap, .imgWrap { flex:1 1 auto; min-height:0; border:1px solid #243044; border-radius:10px; overflow:hidden; background:#0b1224; }
     .pdfWrap object, .iframeWrap iframe { width:100%; height:100%; border:0; }
     .imgWrap img { width:100%; height:100%; object-fit:contain; display:block; background:#0b1224; }
 
-    /* Animated glow when a wire flashes */
+    /* Glow (wires + tiles) */
     .wire { transition: stroke .22s ease, stroke-width .22s ease, opacity .18s ease; }
     .wire--flash { filter: drop-shadow(0 0 8px rgba(132,204,22,.45)); }
-    .wireHalo { opacity: 0; filter: url(#softGlow); pointer-events:none; }
-    .wireHalo.animate { animation: haloPulse 900ms ease-out forwards; }
+
+    .wireHalo, .tileHalo { opacity: 0; filter: url(#softGlow); pointer-events:none; }
+    .wireHalo.animate, .tileHalo.animate { animation: haloPulse 900ms ease-out forwards; }
+
     @keyframes haloPulse { 0% {opacity:0;} 35% {opacity:.95;} 100% {opacity:0;} }
   </style>
 </head>
@@ -65,8 +67,8 @@
     /* ===== Config ===== */
     const COVER_MODE  = "full";      // "full" | "ratio"
     const COVER_RATIO = 0.9;         // width ratio when COVER_MODE === "ratio"
-    const HEIGHT_RATIO = COVER_RATIO; // NEW: default height ratio (falls back to COVER_RATIO)
-    const FLASH_MS    = 1200;
+    const HEIGHT_RATIO = COVER_RATIO; // default height ratio
+    const FLASH_MS    = 1200;        // highlight duration before popup
     const FLASH_MODE  = "gradient";  // "solid" | "random" | "gradient"
 
     /* ===== Global scaling (tiles + gaps + label font) ===== */
@@ -78,6 +80,9 @@
     const size      = Math.round(BASE_SIZE * SCALE);
     const gap       = Math.round(BASE_GAP  * SCALE);
     const fontSize  = Math.max(10, Math.round(BASE_FONT * SCALE));
+
+    /* === New: extra padding so halos aren't clipped at edges === */
+    const PAD = 28; // tweak this if you want larger/smaller halo room
 
     /* --- Text helpers (manual newline support) --- */
     function splitLines(label){ return String(label ?? "").split(/\r?\n/); }
@@ -95,7 +100,7 @@
       );
     }
 
-    /* ===== Helper: allow px numbers or "%" strings for offsets ===== */
+    /* helper: px numbers or "%" strings for offsets */
     function pxOrPct(v, ref) {
       if (typeof v === "string" && v.endsWith("%")) return (parseFloat(v)/100) * ref;
       if (Number.isFinite(v)) return v;
@@ -188,7 +193,7 @@
 
       // click highlight state
       const [clickedId, setClickedId]   = useState(null);
-      const [flashSpec, setFlashSpec]   = useState(null);
+      const [flashSpec, setFlashSpec]   = useState(null); // {mode, seq, perEdge, grads, tileHalo}
       const clickTimerRef = useRef(null);
       const clickSeqRef   = useRef(0);
 
@@ -215,7 +220,7 @@
         return ()=>clearInterval(t);
       },[cols]);
 
-      // geometry
+      // geometry (uses scaled size/gap)
       const w = cols*size + (cols-1)*gap;
       const h = rows*size + (rows-1)*gap;
 
@@ -248,7 +253,7 @@
         const dedup = [pts[0]];
         for (let i=1;i<pts.length;i++){
           const [ax,ay]=dedup[dedup.length-1], [bx,by]=pts[i];
-          if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
+        if (Math.abs(ax-bx)>0.5 || Math.abs(ay-by)>0.5) dedup.push([bx,by]);
         }
         const out = [dedup[0]];
         for (let i=1;i<dedup.length-1;i++){
@@ -276,13 +281,11 @@
         const [sx,sy] = edgePointFor(src, exitSide);
         const [dx,dy] = edgePointFor(dst, enterSide);
 
-        // same row
         if (Math.round(srcCenterR) === Math.round(dstCenterR)) {
           const rowIdx = Math.max(1, Math.min(rows-1, Math.round(srcCenterR)));
           const yh = hChanY(rowIdx);
           return compressPath([[sx,sy],[sx,yh],[dx,yh],[dx,dy]]);
         }
-        // same column
         if (Math.round(srcCenterC) === Math.round(dstCenterC)) {
           const colIdx = Math.max(1, Math.min(cols-1, Math.round(srcCenterC)));
           const xv = vChanX(colIdx);
@@ -325,84 +328,7 @@
 
       const isRelated = (wire, tid) => wire.for===tid || wire.to===tid;
 
-      /* Popup helpers */
-      const openPopup = (tile, evt) => {
-        evt?.preventDefault?.();
-        setActive(tile);
-
-        const {x,y,w:tw,h:th} = tileRectFor(tile);
-        const wrapBox = wrapRef.current.getBoundingClientRect();
-        const svgBox  = svgRef.current.getBoundingClientRect();
-
-        // per-tile overrides (use tile.popup first, then tile.content, else globals)
-        const overrides = tile.popup || tile.content || {};
-        const mode   = overrides.coverMode  ?? COVER_MODE;   // "full" | "ratio"
-        const ratioW = overrides.coverRatio ?? COVER_RATIO;  // width ratio
-        const ratioH = overrides.heightRatio ?? HEIGHT_RATIO; // NEW: height ratio
-        const pxW    = overrides.width;                      // fixed px width (optional)
-        const pxH    = overrides.height;                     // fixed px height (optional)
-
-        // Offsets (px or "%")
-        const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
-        const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
-        // Start-only offsets (fallback to offX/offY)
-        const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
-        const sOffY = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
-
-        // START (anchor) position — apply start offsets
-        const leftStart = (svgBox.left - wrapBox.left) + x + sOffX;
-        const topStart  = (svgBox.top  - wrapBox.top)  + y + sOffY;
-
-        // TARGET (final) rect
-        let target = {};
-        if (Number.isFinite(pxW) && Number.isFinite(pxH)) {
-          const tW = pxW;
-          const tH = pxH;
-          target = {
-            left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
-            top:   (svgBox.top  - wrapBox.top)  + (svgBox.height - tH)/2,
-            width: tW, height: tH
-          };
-        } else if (mode === "full") {
-          target = {
-            left:   svgBox.left - wrapBox.left,
-            top:    svgBox.top  - wrapBox.top,
-            width:  svgBox.width,
-            height: svgBox.height
-          };
-        } else {
-          // Allow >1.0; clamp only at a small minimum
-          const rW = Math.max(0.2, ratioW);
-          const rH = Math.max(0.2, ratioH);
-
-          const tW = svgBox.width  * rW;
-          const tH = svgBox.height * rH;
-
-          // If anchorTop is true, keep the "top" as if height == ratioW (old behavior),
-          // then grow/shrink downward only by using that same top reference.
-          const anchorTop = !!overrides.anchorTop;
-          const topRef = (svgBox.top - wrapBox.top) + (svgBox.height - (svgBox.height * rW))/2;
-
-          target = {
-            left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
-            top:   anchorTop ? topRef : (svgBox.top - wrapBox.top) + (svgBox.height - tH)/2,
-            width: tW,
-            height:tH
-          };
-        }
-
-        // Apply final nudge
-        target.left += offX;
-        target.top  += offY;
-
-        setPopupRect({ left: leftStart, top: topStart, width: tw, height: th, target });
-        requestAnimationFrame(()=> {
-          setPopupRect(prev => prev ? ({ ...prev, left: prev.target.left, top: prev.target.top, width: prev.target.width, height: prev.target.height }) : prev);
-        });
-      };
-      const closePopup = () => setActive(null);
-
-      /* random / gradient stroke helpers */
+      /* ===== Build per-click flash spec (wires + TILE HALO) ===== */
       const rand = (a,b)=>a + Math.random()*(b-a);
       const randomVivid = ()=>`hsl(${Math.floor(rand(0,360))}deg, 80%, 62%)`;
 
@@ -434,7 +360,24 @@
           }
         });
 
-        return { mode: FLASH_MODE, seq, perEdge, grads };
+        /* Tile halo: match wire style (gradient/random/solid) */
+        let tileHalo = null;
+        const t = tileById.get(tileId);
+        if (t) {
+          if (FLASH_MODE === "gradient") {
+            const {x,y,w,h} = tileRectFor(t);
+            const id = `tilegrad-${seq}`;
+            const c1 = randomVivid(), c2 = randomVivid();
+            grads.push({ id, x1:x, y1:y, x2:x+w, y2:y+h, c1, c2 });
+            tileHalo = { type:"gradient", id };
+          } else if (FLASH_MODE === "random") {
+            tileHalo = { type:"color", color: randomVivid() };
+          } else {
+            tileHalo = { type:"color", color: "var(--flash)" };
+          }
+        }
+
+        return { mode: FLASH_MODE, seq, perEdge, grads, tileHalo };
       }
 
       /* click → flash (1.2s) → popup */
@@ -452,6 +395,70 @@
       }
       const isHovering = (id) => (clickedId ? false : (hoverId === id));
 
+      /* Popup helpers */
+      const openPopup = (tile, evt) => {
+        evt?.preventDefault?.();
+        setActive(tile);
+
+        const {x,y,w:tw,h:th} = tileRectFor(tile);
+        const wrapBox = wrapRef.current.getBoundingClientRect();
+        const svgBox  = svgRef.current.getBoundingClientRect();
+
+        const overrides = tile.popup || tile.content || {};
+        const mode   = overrides.coverMode  ?? COVER_MODE;      // "full" | "ratio"
+        const ratioW = overrides.coverRatio ?? COVER_RATIO;     // width ratio
+        const ratioH = overrides.heightRatio ?? HEIGHT_RATIO;   // height ratio
+        const pxW    = overrides.width;                         // px width (optional)
+        const pxH    = overrides.height;                        // px height (optional)
+        const offX  = pxOrPct(overrides.offsetX,  svgBox.width);
+        const offY  = pxOrPct(overrides.offsetY,  svgBox.height);
+        const sOffX = pxOrPct(overrides.startOffsetX ?? overrides.offsetX, svgBox.width);
+        const sOffY = pxOrPct(overrides.startOffsetY ?? overrides.offsetY, svgBox.height);
+
+        const leftStart = (svgBox.left - wrapBox.left) + x + sOffX + PAD;
+        const topStart  = (svgBox.top  - wrapBox.top)  + y + sOffY + PAD;
+
+        let target = {};
+        if (Number.isFinite(pxW) && Number.isFinite(pxH)) {
+          const tW = pxW, tH = pxH;
+          target = {
+            left:(svgBox.left - wrapBox.left) + (svgBox.width - tW)/2,
+            top: (svgBox.top  - wrapBox.top)  + (svgBox.height- tH)/2,
+            width:tW, height:tH
+          };
+        } else if (mode === "full") {
+          target = {
+            left:   (svgBox.left - wrapBox.left),
+            top:    (svgBox.top  - wrapBox.top),
+            width:  svgBox.width,
+            height: svgBox.height
+          };
+        } else {
+          const rW = Math.max(0.2, ratioW);
+          const rH = Math.max(0.2, ratioH);
+          const tW = svgBox.width  * rW;
+          const tH = svgBox.height * rH;
+
+          const anchorTop = !!overrides.anchorTop;
+          const topRef = (svgBox.top - wrapBox.top) + (svgBox.height - (svgBox.height * rW))/2;
+
+          target = {
+            left:  (svgBox.left - wrapBox.left) + (svgBox.width  - tW)/2,
+            top:   anchorTop ? topRef : (svgBox.top - wrapBox.top) + (svgBox.height - tH)/2,
+            width: tW, height:tH
+          };
+        }
+
+        target.left += offX;
+        target.top  += offY;
+
+        setPopupRect({ left: leftStart, top: topStart, width: tw, height: th, target });
+        requestAnimationFrame(()=> {
+          setPopupRect(prev => prev ? ({ ...prev, left: prev.target.left, top: prev.target.top, width: prev.target.width, height: prev.target.height }) : prev);
+        });
+      };
+      const closePopup = () => setActive(null);
+
       return (
         <div className="wrap" ref={wrapRef} style={{position:"relative"}}>
           <h1>Alex DeFalco — FPGA Grid (popup)</h1>
@@ -459,104 +466,130 @@
             Click a tile: its incoming/outgoing connections {FLASH_MODE==="solid" ? "turn lime" : FLASH_MODE==="random" ? "pick random colors" : "get per-wire gradients"}, then the popup appears.
           </p>
 
-          <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:"auto",boxShadow:"0 12px 36px rgba(0,0,0,.35)",borderRadius:14}}
-               role="grid" aria-label="FPGA-style navigation">
-
-            {/* defs: soft glow + dynamic gradients */}
+          {/* viewBox expanded by PAD on each side; actual grid translated by PAD */}
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${w + PAD*2} ${h + PAD*2}`}
+            style={{width:"100%",height:"auto",boxShadow:"0 12px 36px rgba(0,0,0,.35)",borderRadius:14}}
+            role="grid" aria-label="FPGA-style navigation"
+          >
             <defs>
-              <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+              {/* bigger filter region to allow fatter glow */}
+              <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
                 <feMerge><feMergeNode in="blur"/></feMerge>
               </filter>
 
               {flashSpec?.grads?.map(g=>(
                 <linearGradient key={g.id} id={g.id} gradientUnits="userSpaceOnUse"
-                  x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2}>
+                  x1={g.x1 + PAD} y1={g.y1 + PAD} x2={g.x2 + PAD} y2={g.y2 + PAD}>
                   <stop offset="0%"   stopColor={g.c1}/>
                   <stop offset="100%" stopColor={g.c2}/>
                 </linearGradient>
               ))}
             </defs>
 
-            {/* WIRES */}
-            <g>
-              {wirePaths.map((w,i)=>{
-                const flashing = clickedId && (w.for === clickedId || w.to === clickedId);
-                const hotHover = !clickedId && (hoverId && isRelated(w, hoverId));
+            {/* shift whole grid by PAD so we have margin for glow */}
+            <g transform={`translate(${PAD},${PAD})`}>
 
-                let flashStroke = "var(--flash)";
-                if (flashing && flashSpec) {
-                  const spec = flashSpec.perEdge.get(`${w.for}|${w.to}`);
-                  if (spec?.type === "gradient") flashStroke = `url(#${spec.id})`;
-                  else if (spec?.type === "color") flashStroke = spec.color;
+              {/* WIRES */}
+              <g>
+                {wirePaths.map((wPath,i)=>{
+                  const flashing = clickedId && (wPath.for === clickedId || wPath.to === clickedId);
+                  const hotHover = !clickedId && (hoverId && isRelated(wPath, hoverId));
+
+                  let flashStroke = "var(--flash)";
+                  if (flashing && flashSpec) {
+                    const spec = flashSpec.perEdge.get(`${wPath.for}|${wPath.to}`);
+                    if (spec?.type === "gradient") flashStroke = `url(#${spec.id})`;
+                    else if (spec?.type === "color") flashStroke = spec.color;
+                  }
+
+                  const stroke = flashing ? flashStroke : (hotHover ? "var(--wire-hot)" : "var(--wire)");
+                  const width  = flashing ? 3 : (hotHover ? 3 : 2);
+                  const opacityBase = hotHover ? 0.95 : 0.55;
+                  const opacity = flashing ? 0.98 : (wPath.ready ? opacityBase : 0.12);
+
+                  return (
+                    <g key={i}>
+                      {flashing && (
+                        <polyline
+                          className="wireHalo animate"
+                          points={wPath.pts.map(([x,y])=>`${x},${y}`).join(" ")}
+                          fill="none"
+                          stroke={flashStroke}
+                          strokeWidth={15}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      )}
+                      <polyline
+                        className={`wire ${flashing ? "wire--flash" : ""}`}
+                        points={wPath.pts.map(([x,y])=>`${x},${y}`).join(" ")}
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth={width}
+                        opacity={opacity}
+                        strokeLinejoin="round" strokeLinecap="butt"
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+
+              {/* BACKGROUND GRID CELLS */}
+              {Array.from({length: rows}).map((_,r)=>
+                Array.from({length: cols}).map((__,c)=>{
+                  const {x,y,w:ww,h:hh} = cellRect(r,c);
+                  return (
+                    <rect key={`bg-${r}-${c}`} x={x} y={y} width={ww} height={hh} rx={6}
+                          fill="#e5e7eb" opacity="0.12" stroke="var(--stroke)" strokeWidth="1"/>
+                  );
+                })
+              )}
+
+              {/* TILES */}
+              {tiles.map((t)=>{
+                const {x,y,w:tw,h:th} = tileRectFor(t);
+                const isHot = isHovering(t.id);
+                const colActive = t.c <= activeCol;
+                const baseOpacity = colActive ? 1 : 0.15;
+                const tileFlashing = clickedId === t.id;
+
+                // compute halo stroke for tile (match wire style)
+                let haloStroke = null;
+                if (tileFlashing && flashSpec?.tileHalo) {
+                  haloStroke = (flashSpec.tileHalo.type === "gradient")
+                    ? `url(#${flashSpec.tileHalo.id})`
+                    : (flashSpec.tileHalo.color || "var(--flash)");
                 }
 
-                const stroke = flashing ? flashStroke : (hotHover ? "var(--wire-hot)" : "var(--wire)");
-                const width  = flashing ? 3 : (hotHover ? 3 : 2);
-                const opacityBase = hotHover ? 0.95 : 0.55;
-                const opacity = flashing ? 0.98 : (w.ready ? opacityBase : 0.12);
-
                 return (
-                  <g key={i}>
-                    {flashing && (
-                      <polyline
-                        className="wireHalo animate"
-                        points={w.pts.map(([x,y])=>`${x},${y}`).join(" ")}
-                        fill="none"
-                        stroke={flashStroke}
-                        strokeWidth={15}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
+                  <a key={t.id} href={t.href||"#"} tabIndex={0} aria-label={t.label}
+                    onMouseEnter={()=>!clickedId && setHoverId(t.id)} onMouseLeave={()=>setHoverId(null)}
+                    onFocus={()=>!clickedId && setHoverId(t.id)} onBlur={()=>setHoverId(null)}
+                    onClick={(e)=>handleTileClick(t, e)} style={{outline:"none", cursor:"pointer"}}>
+
+                    {/* TILE HALO (same glow behavior as wires) */}
+                    {tileFlashing && haloStroke && (
+                      <rect className="tileHalo animate"
+                        x={x} y={y} width={tw} height={th} rx={6}
+                        fill="none" stroke={haloStroke} strokeWidth="16" />
                     )}
-                    <polyline
-                      className={`wire ${flashing ? "wire--flash" : ""}`}
-                      points={w.pts.map(([x,y])=>`${x},${y}`).join(" ")}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={width}
-                      opacity={opacity}
-                      strokeLinejoin="round" strokeLinecap="butt"
-                    />
-                  </g>
+
+                    {/* base tile */}
+                    <rect x={x} y={y} width={tw} height={th} rx={6}
+                          fill={fillFor(t)}
+                          opacity={isHot ? 1 : baseOpacity*0.95}
+                          stroke={isHot ? "var(--hot)" : "var(--stroke)"} strokeWidth={isHot?2:1}
+                          style={{transition:"opacity .18s ease, stroke .18s ease, transform .18s ease",
+                                  transform: isHot ? "translateY(-1px)" : "none",
+                                  filter: isHot ? "drop-shadow(0 0 8px rgba(255,255,255,.25))" : "none"}} />
+                    <Label t={t} x={x} y={y} tw={tw} th={th} fontSize={fontSize} opacity={colActive?0.9:0} />
+                  </a>
                 );
               })}
             </g>
-
-            {/* BACKGROUND GRID CELLS */}
-            {Array.from({length: rows}).map((_,r)=>
-              Array.from({length: cols}).map((__,c)=>{
-                const {x,y,w:ww,h:hh} = cellRect(r,c);
-                return (
-                  <rect key={`bg-${r}-${c}`} x={x} y={y} width={ww} height={hh} rx={6}
-                        fill="#e5e7eb" opacity="0.12" stroke="var(--stroke)" strokeWidth="1"/>
-                );
-              })
-            )}
-
-            {/* TILES */}
-            {tiles.map((t)=>{
-              const {x,y,w:tw,h:th} = tileRectFor(t);
-              const isHot = isHovering(t.id);
-              const colActive = t.c <= activeCol;
-              const baseOpacity = colActive ? 1 : 0.15;
-
-              return (
-                <a key={t.id} href={t.href||"#"} tabIndex={0} aria-label={t.label}
-                   onMouseEnter={()=>!clickedId && setHoverId(t.id)} onMouseLeave={()=>setHoverId(null)}
-                   onFocus={()=>!clickedId && setHoverId(t.id)} onBlur={()=>setHoverId(null)}
-                   onClick={(e)=>handleTileClick(t, e)} style={{outline:"none", cursor:"pointer"}}>
-                  <rect x={x} y={y} width={tw} height={th} rx={6}
-                        fill={fillFor(t)}
-                        opacity={isHot ? 1 : baseOpacity*0.95}
-                        stroke={isHot ? "var(--hot)" : "var(--stroke)"} strokeWidth={isHot?2:1}
-                        style={{transition:"opacity .18s ease, stroke .18s ease, transform .18s ease",
-                                transform: isHot ? "translateY(-1px)" : "none",
-                                filter: isHot ? "drop-shadow(0 0 8px rgba(255,255,255,.25))" : "none"}} />
-                  <Label t={t} x={x} y={y} tw={tw} th={th} fontSize={fontSize} opacity={colActive?0.9:0} />
-                </a>
-              );
-            })}
           </svg>
 
           {/* POPUP */}
@@ -590,7 +623,7 @@
     const tiles = [
       { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
         content: { type:"text", title:"About Me", text:"Hi! I’m Alex. I work on FPGA/architecture projects, and I like turning RTL and CAD ideas into interactive visuals like this page." },
-        popup: { startOffsetY:0, offsetY:-48, /* optional heightRatio here too */ }
+        popup: { startOffsetY:0, offsetY:-48 }
       },
       { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
         content: { type:"list", title:"How this works", items:[
@@ -602,7 +635,6 @@
       },
       { id:"resume", r:0, c:0, label:"My\nResume", kind:"DSP", spanR:2, spanC:1,
         content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
-        // Example: make taller + grow downward so the header stays visible
         popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.45, anchorTop:true, startOffsetY:0, offsetY:-80 }
       },
       { id:"research", r:3, c:0, label:"Research\nExperience", kind:"DSP", spanR:2, spanC:1,
@@ -655,5 +687,3 @@
   </script>
 </body>
 </html>
-
-
