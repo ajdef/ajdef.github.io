@@ -8,7 +8,7 @@
     :root{
       --bg:#0b0f15; --ink:#e5e7eb; --stroke:#9ca3af; --hot:#111827;
       --tile:#fb923c; --dsp:#6aa9ff; --bram:#a78bfa; --io:#34d399;
-      --wire:#94a3b8; --wire-hot:#f8fafc; --proj:#00ffd5; --rsch:#7458c2;
+      --wire:#94a3b8; --wire-hot:#f8fafc; --proj:#568d94; --rsch:#7458c2;
       --overlay-bg: rgba(4,7,12,.55);
       --flash:#84cc16; /* lime-500 (used when FLASH_MODE === "solid") */
     }
@@ -662,14 +662,24 @@
           </div>
         )}
       },
-      { id:"p1", r:0, c:1, label:"SECDED\nProject", kind:"PROJ",
-        content: { type:"text", title:"SECDED Project", text:"Single Error Correct / Double Error Detect pipeline for cache lines; scrubber + syndrome visualizer." }
-      },
-      { id:"involvement", r:1, c:3, label:"Student\nInvolvement", kind:"IO",
+      
+      { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
         content: { type:"text", title:"Student Involvement", text:"IEEE/ACM chapter events, hackathons, and mentoring undergrads on HDL basics." }
       },
       { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
         content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
+      },
+      { id:"ZKPs", r:4, c:1, label:"ZKPs", kind:"rsch",
+        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
+      },
+      { id:"p1", r:0, c:1, label:"SECDED\nModule\nDesign", kind:"PROJ",
+        content: { type:"text", title:"SECDED Project", text:"Single Error Correct / Double Error Detect pipeline for cache lines; scrubber + syndrome visualizer." }
+      },
+      { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension", kind:"PROJ",
+        content: { type:"text", title:"Senior Design Capstone: SCALER RISC-V Extension", text:"Placeholder" }
+      },
+      { id:"p3", r:1, c:2, label:"Hardware\nTrojan\nDesign", kind:"PROJ",
+        content: { type:"text", title:"FPGA-Based Custom Hardware Trojan Implementation", text:"Placeholder" }
       },
     ];
 
@@ -678,7 +688,15 @@
       {for:"research", to:"About Me"},
       {for:"intern", to:"About Me"},
       {for:"website", to:"About Me"},
-      {for:"involvement", to:"About Me"}
+      {for:"involvement", to:"About Me"},
+
+      {for:"Projects", to:"p1"},
+      {for:"Projects", to:"p2"},
+      {for:"Projects", to:"p3"},
+      {for:"Projects", to:"p4"},
+
+      {for:"research", to:"eFPGA"},
+      {for:"research", to:"ZKPs"}
     ];
 
     function App(){ return <FPGAHome rows={5} cols={5} tiles={tiles} links={links}/>; }
