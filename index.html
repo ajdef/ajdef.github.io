@@ -236,7 +236,7 @@
       return (
         <div className="popup-body">
           {c.title && <h3 style={{margin:"0 0 6px"}}>{c.title}</h3>}
-          <p className="fill">{c.text || "No content."}</p>
+          <p className="fill" style={{whiteSpace:"pre-line"}}>{c.text || "No content."}</p>
         </div>
       );
     }
@@ -782,7 +782,54 @@
     /* ---------- Sample data with per-tile content ---------- */
     const tiles = [
       { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
-        content: { type:"text", title:"About Me", text:"Hi! I’m Alex. I work on FPGA/architecture projects, and I like turning RTL and CAD ideas into interactive visuals like this page." },
+      content: {
+  type: "html",
+  html: `
+    <h3 style="margin:0 0 8px">Hi! I’m Alex, a Computer Engineering Senior from the University of Central Florida.</h3>
+
+    <p>I'm extremely passionate about computer architecture, full-flow VLSI Design, hardware security, and hardware acceleration.</p>
+
+    <h4 style="margin:14px 0 6px">What got me into Computer Engineering?</h4>
+    <p>
+      Growing up, my dad was a printer. He would always find his hands on new tools and technologies,
+      eventually ending up with a CO<sub>2</sub> laser engraver. I always found myself mesmerized by how these
+      machines would physically begin moving after a few clicks and keystrokes on a computer. This curiosity began
+      when I was only five years old, and from then on I was hooked, leading me 20+ years later to be where I am today.
+    </p>
+
+    <h4 style="margin:14px 0 6px">Early PC tinkering</h4>
+    <p>
+      I built my first computer when I was 14, fitted with an AMD A4-6300 and a NVIDIA GTX 660 (which is still
+      running in a home office PC). I remember struggling to run Far Cry 3, and eventually my dad helped me upgrade
+      the CPU to an Intel i5-4690K. This was when I first learned about bottlenecks and per-generation uplifts in
+      computing technology. From here, I was always curious to study new hardware releases—learning not just which CPU
+      or GPU was better, but also why. I was curious to learn what, architecturally, made a piece of silicon better
+      than what came out only the previous year. I'm proud to have chased this curiosity to date, excited to find my
+      way into the workforce for computer architecture and digital design.
+    </p>
+
+    <h4 style="margin:14px 0 6px">Today</h4>
+    <p>
+        While at UCF, I like to stay involved within the ECE community. <br>
+        I'm an active member of my university's IEEE, ACM, and KnightHacks chapters. \
+        I am also a member of the IEEE HKN (Eta Kappa Nu) Honor Society, and a peer mentor for the STRONG-AI scholarship program. \
+        More than anything else, I absolutely love to share my passion with those around me, nurturing growth in the domains of Electrical and Computer engineering as best as I possibly can.
+    </p>
+
+    <h4 style="margin:14px 0 6px">Goals</h4
+    <p>
+      My overall goal with my education and career is to contribute to computing hardware that impacts
+      people in their day-to-day lives.
+    </p>
+
+    <h4 style="margin:14px 0 6px">Things I enjoy</h4>
+    <ul style="margin:0 0 0 18px; padding:0;">
+      <li>Turning RTL + CAD ideas into visuals</li>
+      <li>eFPGA fabrics, SECDED, gem5</li>
+    </ul>
+  `
+},
+
         popup: { startOffsetY:0, offsetY:-48 }
       },
       { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
