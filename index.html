@@ -780,11 +780,11 @@
     }
 
     /* ---------- Sample data with per-tile content ---------- */
-    const tiles = [
-      { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
-      content: {
-  type: "html",
-  html: `
+const tiles = [
+  { id:"About Me", r:2, c:2, label:"About\nMe", kind:"IO",
+    content: {
+      type: "html",
+      html: `
     <h3 style="margin:0 0 8px">Hi! I’m Alex, a Computer Engineering Senior from the University of Central Florida.</h3>
 
     <p>I'm extremely passionate about computer architecture, full-flow VLSI Design, hardware security, and hardware acceleration.</p>
@@ -828,88 +828,378 @@
       <li>eFPGA fabrics, SECDED, gem5</li>
     </ul>
   `
-},
+    },
+    popup: { startOffsetY:0, offsetY:-48 }
+  },
 
-        popup: { startOffsetY:0, offsetY:-48 }
-      },
-      { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
-        content: { type:"list", title:"How this works", items:[
-          "Tiles = CLBs/IO/DSP/BRAM styles",
-          "Wires route only in inter-tile channels",
-          "Click: flash connections, then open card",
-          "Labels support manual newlines (\\n)"
-        ], note:"Source is a single HTML file using React + inline Babel." }
-      },
+  { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">About This Website</h3>
+        <p>This site is a single-file React app that visualizes an FPGA-style fabric. Tiles behave like CLBs/IO/DSP/BRAM, and routes are constrained to inter-tile channels.</p>
 
-      { id:"resume", r:0, c:0, label:"My\nResume", kind:"IO", spanR:2, spanC:1,
-        content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
-        popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.45, anchorTop:true, startOffsetY:0, offsetY:-80 }
-      },
+        <h4 style="margin:14px 0 6px">Interaction model</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Hover: subtle highlight on wires and tiles</li>
+          <li>Click: flash connected routes, then open a detail card</li>
+          <li>Wave boot: traces “draw” outward from an origin tile</li>
+        </ul>
 
-      { id:"research", r:3, c:0, label:"Research\nExperience", kind:"rsch", spanR:2, spanC:1,
-        content: { type:"html", html:"<p><b>Areas:</b> eFPGA fabrics, on-chip networks, cache coherence, reliability.<br/>Ask me about gem5, SECDED, and CAD flows.</p>" }
-      },
-      { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
-        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
-      },
-      { id:"ZKPs", r:4, c:1, label:"ZKPs", kind:"rsch",
-        content: { type:"text", title:"Embedded FPGA", text:"Tile-based fabric integrated into SoC; parameterized switch boxes and bitstream-style sweep on load." }
-      },
+        <h4 style="margin:14px 0 6px">Tech stack</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>React 18 (CDN) + inline Babel</li>
+          <li>Pure SVG for layout, no external canvas libs</li>
+          <li>Accessible markup (ARIA labels, keyboard focus)</li>
+        </ul>
 
-      { id:"intern", r:3, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
-        content: { type:"list", title:"Highlights", items:[
-          "Hardware prototyping on FPGA",
-          "Timing closure + floorplanning",
-          "Verification (UVM/SystemVerilog)"
-        ]}
-      },
-      { id:"NG", r:2, c:3, label:"Northrop\nGrumman\nSummer\n2025", kind:"DSP",
-        content: { type:"text", title:"Summer Internship with Northrop Grumman", text:"Placeholder." }
-      },
+        <h4 style="margin:14px 0 6px">Future ideas</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Deep links to open a tile via <code>#hash</code></li>
+          <li>Row/column legends and IO bank labels</li>
+          <li>Board frame, via field, and silkscreen details</li>
+        </ul>
+      `
+    }
+  },
 
-      { id:"Projects", r:0, c:4, label:"My\nProjects", kind:"PROJ", spanR:2, spanC:1,
-        content: { type:"jsx", render: () => (
-          <div className="fill" style={{display:"flex",flexDirection:"column",gap:8}}>
-            <p><strong>Pinned:</strong></p>
-            <ul style={{margin:"0 0 8px 18px"}}>
-              <li>SECDED Project (ECC on cache lines)</li>
-              <li>eFPGA fabric visualization</li>
-              <li>Coherence + LLC experiments in gem5</li>
-            </ul>
-            <div className="iframeWrap fill">
-              <iframe src="about:blank" title="placeholder"></iframe>
-            </div>
-          </div>
-        )}
-      },
+  { id:"resume", r:0, c:0, label:"My\nResume", kind:"IO", spanR:2, spanC:1,
+    content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.45, anchorTop:true, startOffsetY:0, offsetY:-80 }
+  },
 
-      { id:"p1", r:0, c:1, label:"SECDED\nModule\nDesign", kind:"PROJ",
-        content: { type:"text", title:"SECDED Project", text:"Single Error Correct / Double Error Detect pipeline for cache lines; scrubber + syndrome visualizer." }
-      },
-      { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension", kind:"PROJ",
-        content: { type:"text", title:"Senior Design Capstone: SCALER RISC-V Extension", text:"Placeholder" }
-      },
-      { id:"p3", r:1, c:2, label:"FPGA\nTrojan\nDesign", kind:"PROJ",
-        content: { type:"text", title:"FPGA-Based Custom Hardware Trojan Implementation", text:"Placeholder" }
-      },
-      { id:"p4", r:1, c:1, label:"Cache\nCoherency\nAttack", kind:"PROJ",
-        content: { type:"text", title:"FPGA-Based Side-Channel Attack", text:"Placeholder" }
-      },
-      { id:"p5", r:0, c:2, label:"Range-\nFinder\nPCB\nDesign", kind:"PROJ",
-        content: { type:"text", title:"Rangefinder PCB Design", text:"Placeholder" }
-      },
+  { id:"research", r:3, c:0, label:"Research\nExperience", kind:"rsch", spanR:2, spanC:1,
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Research Experience</h3>
+        <p>I explore programmable fabrics, on-chip networks, and reliability/security interactions across the memory hierarchy.</p>
 
-      { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
-        content: { type:"text", title:"Student Involvement", text:"IEEE/ACM chapter events, hackathons, and mentoring undergrads on HDL basics." }
-      },
+        <h4 style="margin:14px 0 6px">Areas</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>eFPGA fabrics and SoC integration</li>
+          <li>Cache coherence &amp; LLC behavior</li>
+          <li>Reliability (SECDED/ECC) and fault models</li>
+          <li>Hardware security &amp; side channels</li>
+        </ul>
 
-      { id:"skills", r:3, c:1, label:"My\nSkills", kind:"IO",
-        content: { type:"text", title:"My Skills", text:"Placeholder" }
-      },
-      { id:"courses", r:3, c:3, label:"Relevant\nCourses", kind:"IO",
-        content: { type:"text", title:"Relevant Courses", text:"Placeholder" }
-      },
-    ];
+        <h4 style="margin:14px 0 6px">Selected efforts</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Bitstream-style configuration sweeps for eFPGAs</li>
+          <li>Coherence experiments in gem5</li>
+          <li>Syndrome visualization for SECDED pipelines</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Embedded FPGA (eFPGA)</h3>
+        <p>Tile-based fabric embedded within an SoC to accelerate domain-specific kernels and enable post-silicon flexibility.</p>
+
+        <h4 style="margin:14px 0 6px">Fabric &amp; routing</h4>
+        <p>Parameterized switch boxes with Manhattan routing over inter-tile channels. Configuration loaded via a sweep that mirrors bitstream behavior.</p>
+
+        <h4 style="margin:14px 0 6px">Highlights</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Programmable datapaths &amp; simple DSP operator tiles</li>
+          <li>ISR-friendly partial reconfiguration model (concept)</li>
+          <li>Visualization synced to route computation</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"ZKPs", r:4, c:1, label:"ZKPs", kind:"rsch",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Zero-Knowledge Proofs (Exploration)</h3>
+        <p>Investigating hardware-accelerated primitives relevant to ZKP pipelines and succinct proofs.</p>
+
+        <h4 style="margin:14px 0 6px">Focus</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Efficient finite-field arithmetic on reconfigurable fabric</li>
+          <li>Memory layout considerations for MSM/FFT kernels</li>
+          <li>Interplay between throughput, area, and programmability</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Next steps</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Prototype MSM accelerator tile</li>
+          <li>Co-design with host runtime for batching</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"intern", r:3, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Internship Experience</h3>
+        <p>Hands-on exposure to FPGA prototyping, verification, and performance-focused digital design.</p>
+
+        <h4 style="margin:14px 0 6px">Highlights</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Hardware prototyping and bring-up on FPGA</li>
+          <li>Timing closure, floorplanning, and constraint tuning</li>
+          <li>Verification (SystemVerilog/UVM) and testbench authoring</li>
+          <li>Documentation &amp; design reviews</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Impact</h4>
+        <p>Improved iteration speed by tightening build pipelines and refining debug visibility through strategic instrumentation.</p>
+      `
+    }
+  },
+
+  { id:"NG", r:2, c:3, label:"Northrop\nGrumman\nSummer\n2025", kind:"DSP",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Northrop Grumman — Summer 2025</h3>
+        <p>Upcoming summer internship focused on digital design and verification.</p>
+
+        <h4 style="margin:14px 0 6px">Focus areas</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>RTL development and verification workflows</li>
+          <li>FPGA prototyping and lab validation</li>
+          <li>Performance analysis and timing closure</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Goals</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Deliver measurable improvements to subsystem throughput or resource usage</li>
+          <li>Contribute tests and documentation for long-term maintainability</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"Projects", r:0, c:4, label:"My\nProjects", kind:"PROJ", spanR:2, spanC:1,
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Projects (Gateway)</h3>
+        <p>Click a project tile in the grid to open details. This card acts as a hub with quick notes and links.</p>
+
+        <h4 style="margin:14px 0 6px">Pinned</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>SECDED (ECC on cache lines)</li>
+          <li>eFPGA fabric visualization</li>
+          <li>Coherence &amp; LLC experiments in gem5</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Tips</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Watch the wire flash when you click a project—those are the relevant connections.</li>
+          <li>Use ESC to close any card quickly.</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"p1", r:0, c:1, label:"SECDED\nModule\nDesign", kind:"PROJ",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Single Error Correcting, Double Error Detecting Module Design</h3>
+
+        <a href="https://github.com/ajdef/SECDED-Hamming84/blob/main/README.md" 
+        style="color:#34d399; text-decoration:none;">
+        Check out the code on my github!
+        </a>
+        
+        <p>This project was my first endeavor into digital design after having taken my introduction to Digital Logic course (Digital Systems)
+            
+            It includes verilog modules  and testbench designs for an Extended Hamming(7,4) implementation, sometimes referred to as Hamming(8,4).
+            </p>
+
+        <h4 style="margin:14px 0 6px">What is Hamming Code?</h4>
+        <p>Hamming code is a form of error correcting code (ECC) that is able to detect and correct single bit errors within the transmission \
+            of data through the addition of redundant/parity bits. An additional parity bit is able to be added to a hamming code implementation \
+            in order to add double bit error detection (not correction).</p>
+
+        <h4 style="margin:14px 0 6px"> Features:</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Encoder takes in 4 bit data input, encoding to 8 bits enabling SECDED behavior</li>
+          <li>Decoder takes in 8 bit encoded data and resolves the 4 data bits it represents, correcting single bit errors and detecting double bit errors</li>
+          <li>Testbenches cover all cases for data encoding, and all typical cases for data decoding</li>
+          <li>Design validated on Artix-7 FPGA through dip-switch inputs and LED outputs</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Things I want to improve upon:</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Utilize UVM to expand functional coverage of decoder module</li>
+          <li>Modularize the design to work on larger input vectors (eg. Hamming(15,11))</li>
+          <li>Automate FPGA Validation through the usage of a logic analyzer</li>
+          <li>Upload images showcasing existing FPGA validation sequences</li>
+        </ul>
+
+        
+      `
+    }
+  },
+
+  { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension", kind:"PROJ",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">SCALER — RISC-V Extension (Senior Design)</h3>
+        <p>Custom extension concept aimed at accelerating data-parallel kernels on a RV32/64 microarchitecture.</p>
+
+        <h4 style="margin:14px 0 6px">Design notes</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>ISA additions for vector-like operations on small data lanes</li>
+          <li>Compiler intrinsics and simple codegen hooks (experimental)</li>
+          <li>Performance modeling with microbenchmarks</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Status</h4>
+        <p>Spec drafts complete, RTL micro-ops sketched, and early toolchain exploration underway.</p>
+      `
+    }
+  },
+
+  { id:"p3", r:1, c:2, label:"FPGA\nTrojan\nDesign", kind:"PROJ",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">FPGA-based Custom Hardware Trojan</h3>
+        <p>Instructional prototype to study stealthy trigger logic and payload behavior in a controlled environment.</p>
+
+        <h4 style="margin:14px 0 6px">Scope &amp; threat model</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Evaluates detection difficulty vs. resource footprint</li>
+          <li>Explores rare-event triggers and side-channel signatures</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Ethics &amp; controls</h4>
+        <p>Project conducted for defensive research and education with strict containment and review.</p>
+      `
+    }
+  },
+
+  { id:"p4", r:1, c:1, label:"Cache\nCoherency\nAttack", kind:"PROJ",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Cache Coherency Side-Channel Attack</h3>
+        <p>Examines coherence state transitions and timing behavior to infer victim activity under limited observability.</p>
+
+        <h4 style="margin:14px 0 6px">Mechanism</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Prime/probe style access patterns over shared structures</li>
+          <li>Noise mitigation and repeatability techniques</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Evaluation</h4>
+        <p>Reproduced signals on FPGA-based prototypes and cycle-accurate sims; compared impact of line size and policy variants.</p>
+      `
+    }
+  },
+
+  { id:"p5", r:0, c:2, label:"Range-\nFinder\nPCB\nDesign", kind:"PROJ",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Range-Finder PCB Design</h3>
+        <p>Custom PCB integrating MCU, sensor front-end, and power regulation for a compact distance-measurement device.</p>
+
+        <h4 style="margin:14px 0 6px">Design overview</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Mixed-signal layout with ground partitioning</li>
+          <li>Low-noise power and decoupling strategy</li>
+          <li>Enclosure-aware connector placement</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Results</h4>
+        <p>Successful bring-up with stable readings; firmware supports calibration and data logging.</p>
+      `
+    }
+  },
+
+  { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Clubs &amp; Activities</h3>
+        <p>Active within UCF’s engineering community with a focus on mentorship and events.</p>
+
+        <h4 style="margin:14px 0 6px">Organizations</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>IEEE, ACM, KnightHacks</li>
+          <li>IEEE HKN (Eta Kappa Nu) Honor Society</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">What I do</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Peer mentorship (HDL basics, tooling)</li>
+          <li>Event organizing and workshop content</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"skills", r:3, c:1, label:"My\nSkills", kind:"IO",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Skills</h3>
+        <p>Tooling and languages I use day-to-day across architecture, RTL, and research.</p>
+
+        <h4 style="margin:14px 0 6px">Languages &amp; HDLs</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>SystemVerilog, Verilog, VHDL</li>
+          <li>C/C++, Python</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Tools &amp; Flows</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>FPGA toolchains, timing closure, floorplanning</li>
+          <li>UVM verification, waveform/debug suites</li>
+          <li>gem5 and architecture simulators</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Focus areas</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Computer architecture, VLSI design, hardware security</li>
+          <li>Acceleration and reliability (ECC/SECDED)</li>
+        </ul>
+      `
+    }
+  },
+
+  { id:"courses", r:3, c:3, label:"Relevant\nCourses", kind:"IO",
+    content: {
+      type:"html",
+      html: `
+        <h3 style="margin:0 0 8px">Relevant Courses</h3>
+        <p>Coursework supporting my focus on computer architecture and digital design.</p>
+
+        <h4 style="margin:14px 0 6px">Core</h4>
+        <ul style="margin:0 0 8px 18px">
+          <li>Digital Logic Design, Computer Organization</li>
+          <li>VLSI / ASIC Design Flow</li>
+          <li>Embedded Systems</li>
+          <li>Signals &amp; Systems</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Advanced/Electives</h4>
+        <ul style="margin:0 0 0 18px">
+          <li>Computer Architecture</li>
+          <li>Hardware Security</li>
+          <li>Parallel/High-Performance Computing</li>
+        </ul>
+      `
+    }
+  },
+];
+
 
     const links = [
       {for:"resume", to:"About Me"},
