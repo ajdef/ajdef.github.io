@@ -1014,7 +1014,7 @@ const tiles = [
         Check out the code on my github!
         </a>
         
-        <p>This project was my first endeavor into digital design after having taken my introduction to Digital Logic course (Digital Systems)
+        <p>This personal project was my first endeavor into digital design after having taken my introduction to Digital Logic course (Digital Systems).
             
             It includes verilog modules  and testbench designs for an Extended Hamming(7,4) implementation, sometimes referred to as Hamming(8,4).
             </p>
@@ -1045,22 +1045,49 @@ const tiles = [
     }
   },
 
-  { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension", kind:"PROJ",
+  { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension\n(WIP)", kind:"PROJ",
     content: {
       type:"html",
       html: `
-        <h3 style="margin:0 0 8px">SCALER — RISC-V Extension (Senior Design)</h3>
-        <p>Custom extension concept aimed at accelerating data-parallel kernels on a RV32/64 microarchitecture.</p>
+      <h3 style="margin:0 0 8px">SCALER: Side-Channel Leakage Reduction Extension for RISC-V (Senior Design Capstone, In Progress)</h3>
 
-        <h4 style="margin:14px 0 6px">Design notes</h4>
+        <a href="" 
+        style="color:#34d399; text-decoration:none;">
+        UCF Website link for our capstone project! (not yet available)
+        </a>
+
+        <p>This ongoing group project is my (our) undergraduate capstone, in which we take an existing RISC-V core design (Ibex) that utilizes 
+            the RV32I extension and implement both commonly implemented ISA extensions as well as custom ones to mitigate side channel attacks 
+            through modern research topics such as noise injection and boolean masking. This project has been generously sponsored by Northrop Grumman.
+        </p>
+
+        <h4 style="margin:14px 0 6px">What is the purpose of this project?</h4>
+
+        <p>This project proves to be rather atypical to what a capstone at UCF normally encompasses. Through this project, we aim to develop our personal 
+            skillsets within the full ASIC design flow, spanning from the initial design phases all the way up to tape-out.
+            UCF's partnership with Cadence has generously provided us with an immense number of training courses alongside their EDA toolchains, ensuring 
+            that we are able to learn actual industry tools the way they are intended to be used.
+        </p>
+
+        <h4 style="margin:14px 0 6px">Who's on the team?</h4>
         <ul style="margin:0 0 8px 18px">
-          <li>ISA additions for vector-like operations on small data lanes</li>
-          <li>Compiler intrinsics and simple codegen hooks (experimental)</li>
-          <li>Performance modeling with microbenchmarks</li>
+        <li><a href="https://www.linkedin.com/in/ajdef/" style="color:#34d399; text-decoration:none;">Alexander DeFalco</a> - Computer Engineering</li>
+        <li><a href="https://www.linkedin.com/in/joshuavjoseph/" style="color:#34d399; text-decoration:none;">Joshua Joseph</a> - Computer Engineering</li>
+        <li><a href="https://www.linkedin.com/in/danielodi/" style="color:#34d399; text-decoration:none;">Daniel Odi</a> - Computer Engineering</li>
+        <li><a href="https://www.linkedin.com/in/alyssapinnock/" style="color:#34d399; text-decoration:none;">Alyssa Pinnock</a> - Computer Engineering</li>
+        <li><a href="https://www.linkedin.com/in/anna-b-craig/" style="color:#34d399; text-decoration:none;">Anna Craig</a> - Electrical Engineering</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px">Specific Project Goals:</h4>
+        <ul style="margin:0 0 8px 18px">
+        <li>Implement common RISC-V extensions alongside unique ISA extensions for side-channel mitigation (noise injection, boolean masking)</li>
+        <li>Functionally verify our design through UVM by the end of the Fall 2025 semester</li>
+        <li>Proceed through the full tapeout process, generating a GDS-II file for our RISC-V design on a 45nm process node</li>
         </ul>
 
         <h4 style="margin:14px 0 6px">Status</h4>
-        <p>Spec drafts complete, RTL micro-ops sketched, and early toolchain exploration underway.</p>
+        <p>Cadence certification trainings are underway, along with the initial exploration of the baseline Ibex core.</p>
+
       `
     }
   },
@@ -1088,8 +1115,14 @@ const tiles = [
     content: {
       type:"html",
       html: `
-        <h3 style="margin:0 0 8px">Cache Coherency Side-Channel Attack</h3>
-        <p>Examines coherence state transitions and timing behavior to infer victim activity under limited observability.</p>
+        <h3 style="margin:0 0 8px">Full-System Cache Coherency Attack Implementation in gem5</h3>
+        <p>This project was a lab experiemnt from my Hardware Security and Trusted Circuit Design course at UCF, taught by Dr. Fan Yao.
+            It saw us successfully simulating a system with a multi-level cache in gem5, utilizing attacker and victim threads in order to \
+            encode data for secret transmission through the clever manipulation of cache coherency states when accessing specifically profiled \
+            memory addresses.
+            </p>
+
+
 
         <h4 style="margin:14px 0 6px">Mechanism</h4>
         <ul style="margin:0 0 8px 18px">
