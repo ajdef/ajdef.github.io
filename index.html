@@ -829,7 +829,7 @@ const tiles = [
     </ul>
   `
     },
-    popup: { startOffsetY:0, offsetY:-48 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"website", r:2, c:4, label:"About\nThis\nWebsite", kind:"CLB",
@@ -861,12 +861,12 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"resume", r:0, c:0, label:"My\nResume", kind:"IO", spanR:2, spanC:1,
     content:{ type:"pdf", title:"Resume (PDF)", src:"resume.pdf" },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.45, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"research", r:3, c:0, label:"Research\nExperience", kind:"rsch", spanR:2, spanC:1,
@@ -892,7 +892,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"eFPGA", r:4, c:3, label:"eFPGA", kind:"rsch",
@@ -913,7 +913,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"ZKPs", r:4, c:1, label:"ZKPs", kind:"rsch",
@@ -937,7 +937,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"intern", r:3, c:4, label:"Internship\nExperience", kind:"DSP", spanR:2, spanC:1,
@@ -959,7 +959,7 @@ const tiles = [
         <p>Improved iteration speed by tightening build pipelines and refining debug visibility through strategic instrumentation.</p>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"NG", r:2, c:3, label:"Northrop\nGrumman\nSummer\n2025", kind:"DSP",
@@ -983,7 +983,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"Projects", r:0, c:4, label:"My\nProjects", kind:"PROJ", spanR:2, spanC:1,
@@ -1007,7 +1007,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"p1", r:0, c:1, label:"SECDED\nModule\nDesign", kind:"PROJ",
@@ -1050,7 +1050,7 @@ const tiles = [
         
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"p2", r:0, c:3, label:"SCALER\nRISC-V\nExtension\n(WIP)", kind:"PROJ",
@@ -1098,7 +1098,7 @@ const tiles = [
 
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"p3", r:1, c:2, label:"FPGA\nTrojan\nDesign", kind:"PROJ",
@@ -1118,7 +1118,7 @@ const tiles = [
         <p>Project conducted for defensive research and education with strict containment and review.</p>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"p4", r:1, c:1, label:"Cache\nCoherency\nAttack", kind:"PROJ",
@@ -1144,7 +1144,7 @@ const tiles = [
         <p>Reproduced signals on FPGA-based prototypes and cycle-accurate sims; compared impact of line size and policy variants.</p>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"p5", r:0, c:2, label:"Range-\nFinder\nPCB\nDesign", kind:"PROJ",
@@ -1165,7 +1165,7 @@ const tiles = [
         <p>Successful bring-up with stable readings; firmware supports calibration and data logging.</p>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"involvement", r:2, c:0, label:"Clubs\n&\nActivities", kind:"IO",
@@ -1188,7 +1188,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"skills", r:3, c:1, label:"My\nSkills", kind:"IO",
@@ -1218,7 +1218,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 
   { id:"courses", r:3, c:3, label:"Relevant\nCourses", kind:"IO",
@@ -1244,7 +1244,7 @@ const tiles = [
         </ul>
       `
     },
-    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.4, anchorTop:true, startOffsetY:0, offsetY:-80 }
+    popup:  { coverMode:"ratio", coverRatio:1, heightRatio:1.425, anchorTop:true, startOffsetY:0, offsetY:-80 }
   },
 ];
 
